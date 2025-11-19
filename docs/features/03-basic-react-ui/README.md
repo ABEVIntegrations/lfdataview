@@ -89,13 +89,43 @@ src/
 - Action buttons:
   - "Add Row" (opens create modal)
   - "Refresh" (reload data)
+  - "Download CSV" (exports filtered data)
 - Data grid:
   - Columns: Dynamic based on table schema
-  - Rows: Table data
+  - **`_key` column is always displayed first** (leftmost position)
+  - **Column filters:** Filter input field below each column header (except `_key`)
+  - Rows: Table data (filtered if filters are active)
   - Actions per row: Edit, Delete
 - Pagination controls (if > 50 rows)
 - Loading indicator
 - Error message display
+
+#### Primary Key Behavior
+All Laserfiche tables have a `_key` column that serves as the primary key:
+- **Always displayed first:** The `_key` column is always shown in the leftmost position
+- **Auto-generated:** When creating a new row, the `_key` field is not shown (Laserfiche generates it automatically)
+- **Non-editable:** When editing a row, the `_key` field is displayed but disabled (cannot be modified)
+- **Used for operations:** Edit and delete operations use the `_key` value to identify the row
+
+#### Column Filtering
+Each column (except `_key`) has a filter input field:
+- **Case-insensitive:** Filters match regardless of case
+- **Exact match by default:** Typing "2" matches only "2", not "102"
+- **Wildcard support:** Use `*` for fuzzy matching:
+  - `*2*` = contains "2"
+  - `2*` = starts with "2"
+  - `*2` = ends with "2"
+  - `*val*` = contains "val"
+- **Multiple filters:** Filters can be applied to multiple columns simultaneously (AND logic)
+- **Empty state:** Shows "No rows match the filter" when filters exclude all rows
+
+#### CSV Export
+The "Download CSV" button exports the currently displayed data:
+- **Exports filtered data:** Only rows matching the current filters are exported
+- **Includes all columns:** All columns including `_key` are exported
+- **Proper CSV formatting:** Values with commas, quotes, or newlines are properly escaped
+- **Filename format:** `{tableName}_{date}.csv` (e.g., `Holidays_2025-11-19.csv`)
+- **Disabled when empty:** Button is disabled when no rows to export
 
 ### Create/Edit Modal
 - Form fields (dynamic based on table columns)

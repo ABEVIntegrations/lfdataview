@@ -29,6 +29,7 @@ import {
   Delete,
   Refresh,
   ArrowBack,
+  Download,
 } from '@mui/icons-material';
 import {
   fetchTableRows,
@@ -59,6 +60,9 @@ export default function TableDetailPage() {
     message: '',
     severity: 'success',
   });
+
+  // Filter state
+  const [filters, setFilters] = useState<Record<string, string>>({});
 
   // Fetch table rows
   const {
@@ -114,10 +118,71 @@ export default function TableDetailPage() {
     },
   });
 
-  // Get columns from first row
+  // Get columns from first row, with _key always first
   const rows = rowsResponse?.rows || [];
-  const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
-  const primaryKey = columns[0] || 'id'; // Assume first column is primary key
+  const primaryKey = '_key';
+  const columns = rows.length > 0
+    ? [primaryKey, ...Object.keys(rows[0]).filter(col => col !== primaryKey)]
+    : [];
+
+  // Filter rows based on filter values
+  // Supports wildcards: * for any characters
+  // Examples: "2" = exact, "*2*" = contains, "2*" = starts with, "*2" = ends with
+  const filteredRows = rows.filter((row) => {
+    return Object.entries(filters).every(([column, filterValue]) => {
+      if (!filterValue) return true;
+      const cellValue = String(row[column] ?? '').toLowerCase();
+      const filter = filterValue.toLowerCase();
+
+      // Check for wildcard patterns
+      if (filter.includes('*')) {
+        // Convert wildcard pattern to regex
+        const regexPattern = filter
+          .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars except *
+          .replace(/\*/g, '.*'); // Convert * to .*
+        const regex = new RegExp(`^${regexPattern}$`);
+        return regex.test(cellValue);
+      }
+
+      // Default: exact match
+      return cellValue === filter;
+    });
+  });
+
+  // Handle filter change
+  const handleFilterChange = (column: string, value: string) => {
+    setFilters((prev) => ({ ...prev, [column]: value }));
+  };
+
+  // Download CSV
+  const handleDownloadCsv = () => {
+    if (filteredRows.length === 0) return;
+
+    const csvContent = [
+      // Header row
+      columns.join(','),
+      // Data rows
+      ...filteredRows.map((row) =>
+        columns
+          .map((col) => {
+            const value = String(row[col] ?? '');
+            // Escape quotes and wrap in quotes if contains comma or quote
+            if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+              return `"${value.replace(/"/g, '""')}"`;
+            }
+            return value;
+          })
+          .join(',')
+      ),
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${tableName}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
 
   // Handlers
   const handleChangePage = (_: unknown, newPage: number) => {
@@ -208,6 +273,9 @@ export default function TableDetailPage() {
           <Button startIcon={<Refresh />} onClick={() => refetch()} sx={{ mr: 1 }}>
             Refresh
           </Button>
+          <Button startIcon={<Download />} onClick={handleDownloadCsv} sx={{ mr: 1 }} disabled={filteredRows.length === 0}>
+            Download CSV
+          </Button>
           <Button variant="contained" startIcon={<Add />} onClick={handleCreate}>
             Add Row
           </Button>
@@ -226,16 +294,34 @@ export default function TableDetailPage() {
               ))}
               <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
             </TableRow>
+            <TableRow>
+              {columns.map((column) => (
+                <TableCell key={`filter-${column}`} sx={{ p: 1 }}>
+                  {column !== primaryKey && (
+                    <TextField
+                      size="small"
+                      placeholder={`Use * for wildcard`}
+                      value={filters[column] || ''}
+                      onChange={(e) => handleFilterChange(column, e.target.value)}
+                      fullWidth
+                      variant="outlined"
+                      sx={{ '& .MuiInputBase-input': { py: 0.5, fontSize: '0.875rem' } }}
+                    />
+                  )}
+                </TableCell>
+              ))}
+              <TableCell />
+            </TableRow>
           </TableHead>
           <TableBody>
-            {rows.length === 0 ? (
+            {filteredRows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length + 1} align="center">
-                  No rows found
+                  {rows.length === 0 ? 'No rows found' : 'No rows match the filter'}
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row, index) => (
+              filteredRows.map((row, index) => (
                 <TableRow key={index} hover>
                   {columns.map((column) => (
                     <TableCell key={column}>
@@ -270,7 +356,7 @@ export default function TableDetailPage() {
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add New Row</DialogTitle>
         <DialogContent>
-          {columns.map((column) => (
+          {columns.filter(col => col !== primaryKey).map((column) => (
             <TextField
               key={column}
               label={column}
