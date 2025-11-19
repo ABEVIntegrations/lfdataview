@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(openssl rand:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(sudo docker-compose up:*)",
+      "Bash(chmod:*)",
+      "Bash(docker.exe ps:*)",
+      "Bash(sudo docker ps:*)",
+      "Bash(powershell.exe -Command \"docker logs --tail 50 lfdataview-backend\")",
+      "WebFetch(domain:developer.laserfiche.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
