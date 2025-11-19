@@ -21,6 +21,31 @@ export interface RowResponse {
   data: Record<string, unknown>;
 }
 
+export interface ColumnInfo {
+  name: string;
+  type: string;
+  required: boolean;
+}
+
+export interface TableSchemaResponse {
+  table_name: string;
+  columns: ColumnInfo[];
+}
+
+export interface RowResult {
+  index: number;
+  success: boolean;
+  data?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface BatchCreateResponse {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: RowResult[];
+}
+
 export interface AuthStatus {
   authenticated: boolean;
   user?: {

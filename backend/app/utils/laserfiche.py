@@ -208,7 +208,7 @@ class LaserficheClient:
         params = {
             "$top": min(limit, 1000),  # Cap at 1000
             "$skip": offset,
-            "$count": "true",  # Include total count
+            "$count": "true",  # Include total count (OData uses string "true")
         }
 
         async with httpx.AsyncClient() as client:
@@ -220,9 +220,17 @@ class LaserficheClient:
             response.raise_for_status()
             data = response.json()
 
+            rows = data.get("value", [])
+
+            # Laserfiche OData API doesn't support $count
+            # Use -1 to indicate unknown total (frontend will handle this)
+            total = data.get("@odata.count")
+            if total is None:
+                total = -1  # Unknown total
+
             return {
-                "rows": data.get("value", []),
-                "total": data.get("@odata.count", 0),
+                "rows": rows,
+                "total": int(total),
                 "limit": limit,
                 "offset": offset,
             }
@@ -356,6 +364,133 @@ class LaserficheClient:
             )
             response.raise_for_status()
             # DELETE returns 204 No Content on success
+
+    async def get_table_schema(
+        self,
+        access_token: str,
+        table_name: str,
+    ) -> List[Dict]:
+        """Get the schema/columns of a table.
+
+        Args:
+            access_token: Valid access token with project scope
+            table_name: Name of the table
+
+        Returns:
+            List of column definitions with name and type
+
+        Raises:
+            httpx.HTTPError: If request fails
+        """
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
+
+        # Get one row to infer schema from the data
+        # OData Table API doesn't have a dedicated schema endpoint
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.API_BASE}/table/{table_name}",
+                headers=headers,
+                params={"$top": 1},
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            rows = data.get("value", [])
+            if not rows:
+                return []
+
+            # Infer column types from first row
+            columns = []
+            for key, value in rows[0].items():
+                col_type = "string"
+                if isinstance(value, bool):
+                    col_type = "boolean"
+                elif isinstance(value, int):
+                    col_type = "integer"
+                elif isinstance(value, float):
+                    col_type = "number"
+                elif value is None:
+                    col_type = "string"
+
+                columns.append({
+                    "name": key,
+                    "type": col_type,
+                    "required": key == "_key",  # Only _key is required (and auto-generated)
+                })
+
+            return columns
+
+    async def batch_create_rows(
+        self,
+        access_token: str,
+        table_name: str,
+        rows: List[Dict],
+        max_concurrent: int = 5,
+    ) -> List[Dict]:
+        """Create multiple rows concurrently.
+
+        Args:
+            access_token: Valid access token with project scope
+            table_name: Name of the table
+            rows: List of row data dictionaries
+            max_concurrent: Maximum concurrent requests
+
+        Returns:
+            List of results with index, success, data/error for each row
+        """
+        import asyncio
+
+        results = []
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def create_with_semaphore(index: int, row_data: Dict) -> Dict:
+            async with semaphore:
+                try:
+                    created = await self.create_table_row(
+                        access_token=access_token,
+                        table_name=table_name,
+                        data=row_data,
+                    )
+                    return {
+                        "index": index,
+                        "success": True,
+                        "data": created,
+                        "error": None,
+                    }
+                except httpx.HTTPStatusError as e:
+                    error_msg = str(e)
+                    try:
+                        error_data = e.response.json()
+                        error_msg = error_data.get("error", {}).get("message", str(e))
+                    except Exception:
+                        pass
+                    return {
+                        "index": index,
+                        "success": False,
+                        "data": None,
+                        "error": error_msg,
+                    }
+                except Exception as e:
+                    return {
+                        "index": index,
+                        "success": False,
+                        "data": None,
+                        "error": str(e),
+                    }
+
+        # Create tasks for all rows
+        tasks = [
+            create_with_semaphore(i, row)
+            for i, row in enumerate(rows)
+        ]
+
+        # Execute concurrently
+        results = await asyncio.gather(*tasks)
+
+        return list(results)
 
 
 # Global instance

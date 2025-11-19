@@ -4,6 +4,8 @@ import {
   TableListResponse,
   TableRowsResponse,
   RowResponse,
+  TableSchemaResponse,
+  BatchCreateResponse,
 } from '../types';
 
 const API_BASE = 'http://localhost:8000';
@@ -97,5 +99,21 @@ export async function deleteTableRow(
 ): Promise<void> {
   await fetchWithCredentials(`${API_BASE}/tables/${tableName}/${key}`, {
     method: 'DELETE',
+  });
+}
+
+export async function fetchTableSchema(
+  tableName: string
+): Promise<TableSchemaResponse> {
+  return fetchWithCredentials(`${API_BASE}/tables/${tableName}/schema`);
+}
+
+export async function batchCreateRows(
+  tableName: string,
+  rows: Record<string, unknown>[]
+): Promise<BatchCreateResponse> {
+  return fetchWithCredentials(`${API_BASE}/tables/${tableName}/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ rows }),
   });
 }

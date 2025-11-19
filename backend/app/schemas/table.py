@@ -22,7 +22,7 @@ class TableRowsResponse(BaseModel):
     """Response for getting table rows with pagination."""
 
     rows: List[Dict[str, Any]] = Field(..., description="List of row data")
-    total: int = Field(..., description="Total number of rows in table", ge=0)
+    total: int = Field(..., description="Total number of rows in table (-1 if unknown)", ge=-1)
     limit: int = Field(..., description="Number of rows per page", ge=1, le=1000)
     offset: int = Field(..., description="Number of rows skipped", ge=0)
 
@@ -89,3 +89,52 @@ class ErrorResponse(BaseModel):
                 "error_code": "TABLE_NOT_FOUND",
             }
         }
+
+
+class ColumnInfo(BaseModel):
+    """Information about a table column."""
+
+    name: str = Field(..., description="Column name")
+    type: str = Field(..., description="Column data type")
+    required: bool = Field(False, description="Whether the column is required")
+
+
+class TableSchemaResponse(BaseModel):
+    """Response for getting table schema/columns."""
+
+    table_name: str = Field(..., description="Name of the table")
+    columns: List[ColumnInfo] = Field(..., description="List of column definitions")
+
+
+class BatchCreateRequest(BaseModel):
+    """Request body for batch creating table rows."""
+
+    rows: List[Dict[str, Any]] = Field(..., description="List of row data to create")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "rows": [
+                    {"Name": "Item 1", "Value": 100},
+                    {"Name": "Item 2", "Value": 200},
+                ]
+            }
+        }
+
+
+class RowResult(BaseModel):
+    """Result of a single row operation in batch."""
+
+    index: int = Field(..., description="Index of the row in the request")
+    success: bool = Field(..., description="Whether the operation succeeded")
+    data: Optional[Dict[str, Any]] = Field(None, description="Created row data if successful")
+    error: Optional[str] = Field(None, description="Error message if failed")
+
+
+class BatchCreateResponse(BaseModel):
+    """Response for batch create operations."""
+
+    total: int = Field(..., description="Total number of rows in request")
+    succeeded: int = Field(..., description="Number of rows successfully created")
+    failed: int = Field(..., description="Number of rows that failed")
+    results: List[RowResult] = Field(..., description="Individual results for each row")

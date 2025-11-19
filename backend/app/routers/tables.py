@@ -13,6 +13,11 @@ from app.schemas.table import (
     RowResponse,
     ErrorResponse,
     TableInfo,
+    TableSchemaResponse,
+    ColumnInfo,
+    BatchCreateRequest,
+    BatchCreateResponse,
+    RowResult,
 )
 from app.utils.laserfiche import laserfiche_client
 
@@ -191,6 +196,51 @@ async def get_table_rows(
 
 
 @router.get(
+    "/{table_name}/schema",
+    response_model=TableSchemaResponse,
+    summary="Get table schema",
+    description="Get the column definitions for a table",
+)
+async def get_table_schema(
+    table_name: str,
+    access_token: str = Depends(get_user_access_token),
+) -> TableSchemaResponse:
+    """Get table schema/column definitions.
+
+    Args:
+        table_name: Name of the table
+        access_token: User's access token (from dependency)
+
+    Returns:
+        Table schema with column definitions
+    """
+    try:
+        columns_data = await laserfiche_client.get_table_schema(
+            access_token=access_token,
+            table_name=table_name,
+        )
+
+        columns = [
+            ColumnInfo(
+                name=col["name"],
+                type=col["type"],
+                required=col.get("required", False),
+            )
+            for col in columns_data
+        ]
+
+        return TableSchemaResponse(table_name=table_name, columns=columns)
+
+    except httpx.HTTPStatusError as e:
+        handle_laserfiche_error(e)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get table schema: {str(e)}",
+        )
+
+
+@router.get(
     "/{table_name}/{key}",
     response_model=RowResponse,
     summary="Get single row",
@@ -266,6 +316,61 @@ async def create_table_row(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create table row: {str(e)}",
+        )
+
+
+@router.post(
+    "/{table_name}/batch",
+    response_model=BatchCreateResponse,
+    summary="Batch create rows",
+    description="Create multiple rows in a table concurrently",
+)
+async def batch_create_rows(
+    table_name: str,
+    request: BatchCreateRequest,
+    access_token: str = Depends(get_user_access_token),
+) -> BatchCreateResponse:
+    """Create multiple rows in a table.
+
+    Args:
+        table_name: Name of the table
+        request: Batch of rows to create
+        access_token: User's access token (from dependency)
+
+    Returns:
+        Results for each row (success/failure)
+    """
+    try:
+        results = await laserfiche_client.batch_create_rows(
+            access_token=access_token,
+            table_name=table_name,
+            rows=request.rows,
+        )
+
+        row_results = [
+            RowResult(
+                index=r["index"],
+                success=r["success"],
+                data=r["data"],
+                error=r["error"],
+            )
+            for r in results
+        ]
+
+        succeeded = sum(1 for r in results if r["success"])
+        failed = len(results) - succeeded
+
+        return BatchCreateResponse(
+            total=len(results),
+            succeeded=succeeded,
+            failed=failed,
+            results=row_results,
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to batch create rows: {str(e)}",
         )
 
 
