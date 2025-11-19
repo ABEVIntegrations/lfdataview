@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+backend/.env
 
 # Docker
 docker-compose.override.yml
@@ -15,3 +16,38 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# Backend Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Build artifacts
+build/
+dist/
