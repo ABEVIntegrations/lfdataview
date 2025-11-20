@@ -18,6 +18,8 @@ from app.schemas.table import (
     BatchCreateRequest,
     BatchCreateResponse,
     RowResult,
+    ReplaceAllRequest,
+    ReplaceAllResponse,
 )
 from app.utils.laserfiche import laserfiche_client
 
@@ -371,6 +373,56 @@ async def batch_create_rows(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to batch create rows: {str(e)}",
+        )
+
+
+@router.post(
+    "/{table_name}/replace",
+    response_model=ReplaceAllResponse,
+    summary="Replace all rows",
+    description="Replace all rows in a table with new data (deletes existing rows)",
+)
+async def replace_all_rows(
+    table_name: str,
+    request: ReplaceAllRequest,
+    access_token: str = Depends(get_user_access_token),
+) -> ReplaceAllResponse:
+    """Replace all rows in a table.
+
+    WARNING: This deletes ALL existing rows and replaces them with the provided data.
+
+    Args:
+        table_name: Name of the table
+        request: New rows to replace table with
+        access_token: User's access token (from dependency)
+
+    Returns:
+        Operation result
+    """
+    try:
+        result = await laserfiche_client.replace_all_rows(
+            access_token=access_token,
+            table_name=table_name,
+            rows=request.rows,
+        )
+
+        return ReplaceAllResponse(
+            success=result.get("success", False),
+            rows_replaced=result.get("rows_replaced", 0),
+            error=result.get("error"),
+        )
+
+    except httpx.HTTPStatusError as e:
+        handle_laserfiche_error(e)
+    except TimeoutError as e:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to replace table rows: {str(e)}",
         )
 
 

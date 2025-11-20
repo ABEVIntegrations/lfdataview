@@ -161,6 +161,70 @@ Cookie: session_token=xxx
 
 ---
 
+### GET /tables/{table_name}/schema
+Get table column definitions.
+
+**Request:**
+```http
+GET /tables/Customers/schema
+Cookie: session_token=xxx
+```
+
+**Response 200:**
+```json
+{
+  "table_name": "Customers",
+  "columns": [
+    {"name": "_key", "type": "string", "required": true},
+    {"name": "Name", "type": "string", "required": true},
+    {"name": "Email", "type": "string", "required": false}
+  ]
+}
+```
+
+---
+
+### POST /tables/{table_name}/replace
+Replace all rows in a table with new data.
+
+**WARNING:** This deletes ALL existing rows and replaces them with the provided data.
+
+**Request:**
+```http
+POST /tables/Customers/replace
+Content-Type: application/json
+Cookie: session_token=xxx
+
+{
+  "rows": [
+    {"Name": "Acme Corp", "Email": "contact@acme.com"},
+    {"Name": "Initech", "Email": "info@initech.com"}
+  ]
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "rows_replaced": 2
+}
+```
+
+**Response 504 (Timeout):**
+```json
+{
+  "detail": "Replace operation timed out after 300 seconds"
+}
+```
+
+**Notes:**
+- The `_key` column should NOT be included in the rows (auto-generated)
+- This is an atomic operation using Laserfiche's ReplaceAllRowsAsync
+- Operation may timeout for very large datasets (default: 300 seconds)
+
+---
+
 ## Error Responses
 
 All endpoints may return:

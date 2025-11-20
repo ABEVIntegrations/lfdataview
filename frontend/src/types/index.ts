@@ -46,6 +46,12 @@ export interface BatchCreateResponse {
   results: RowResult[];
 }
 
+export interface ReplaceAllResponse {
+  success: boolean;
+  rows_replaced: number;
+  error?: string;
+}
+
 export interface AuthStatus {
   authenticated: boolean;
   user?: {

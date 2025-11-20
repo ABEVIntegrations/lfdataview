@@ -138,3 +138,27 @@ class BatchCreateResponse(BaseModel):
     succeeded: int = Field(..., description="Number of rows successfully created")
     failed: int = Field(..., description="Number of rows that failed")
     results: List[RowResult] = Field(..., description="Individual results for each row")
+
+
+class ReplaceAllRequest(BaseModel):
+    """Request body for replacing all table rows."""
+
+    rows: List[Dict[str, Any]] = Field(..., description="List of row data to replace table with")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "rows": [
+                    {"Name": "Item 1", "Value": 100},
+                    {"Name": "Item 2", "Value": 200},
+                ]
+            }
+        }
+
+
+class ReplaceAllResponse(BaseModel):
+    """Response for replace all operation."""
+
+    success: bool = Field(..., description="Whether the operation succeeded")
+    rows_replaced: int = Field(..., description="Number of rows in the new table")
+    error: Optional[str] = Field(None, description="Error message if failed")

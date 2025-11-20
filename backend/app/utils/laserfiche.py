@@ -492,6 +492,117 @@ class LaserficheClient:
 
         return list(results)
 
+    async def replace_all_rows(
+        self,
+        access_token: str,
+        table_name: str,
+        rows: List[Dict],
+        timeout: int = 300,
+    ) -> Dict:
+        """Replace all rows in a table with new data.
+
+        This deletes all existing rows and inserts the provided rows.
+        Note: This is NOT atomic - if creation fails partway through,
+        some data may be lost.
+
+        Args:
+            access_token: Valid access token with project scope
+            table_name: Name of the table
+            rows: List of row data dictionaries (without _key)
+            timeout: Maximum seconds to wait for operation (default: 300)
+
+        Returns:
+            Dict with operation result
+
+        Raises:
+            httpx.HTTPError: If request fails
+        """
+        import asyncio
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Step 1: Get all existing rows to find their keys
+        logger.info(f"Fetching existing rows from {table_name}")
+        existing_rows = []
+        offset = 0
+        limit = 1000
+
+        while True:
+            data = await self.get_table_rows(
+                access_token=access_token,
+                table_name=table_name,
+                limit=limit,
+                offset=offset,
+            )
+            batch = data.get("rows", [])
+            existing_rows.extend(batch)
+
+            if len(batch) < limit:
+                break
+            offset += limit
+
+        logger.info(f"Found {len(existing_rows)} existing rows to delete")
+
+        # Step 2: Delete all existing rows
+        if existing_rows:
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json",
+            }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                semaphore = asyncio.Semaphore(10)  # Limit concurrent deletes
+
+                async def delete_row(key: str):
+                    async with semaphore:
+                        try:
+                            response = await client.delete(
+                                f"{self.API_BASE}/table/{table_name}('{key}')",
+                                headers=headers,
+                            )
+                            response.raise_for_status()
+                            return True
+                        except Exception as e:
+                            logger.error(f"Failed to delete row {key}: {e}")
+                            return False
+
+                # Delete all rows concurrently
+                keys = [row.get("_key") for row in existing_rows if row.get("_key")]
+                delete_tasks = [delete_row(key) for key in keys]
+                delete_results = await asyncio.gather(*delete_tasks)
+
+                deleted_count = sum(1 for r in delete_results if r)
+                logger.info(f"Deleted {deleted_count}/{len(keys)} rows")
+
+        # Step 3: Create all new rows using batch_create_rows
+        if rows:
+            logger.info(f"Creating {len(rows)} new rows")
+            results = await self.batch_create_rows(
+                access_token=access_token,
+                table_name=table_name,
+                rows=rows,
+            )
+
+            succeeded = sum(1 for r in results if r.get("success"))
+            failed = len(results) - succeeded
+
+            if failed > 0:
+                return {
+                    "success": False,
+                    "rows_replaced": succeeded,
+                    "error": f"{failed} rows failed to create",
+                }
+
+            return {
+                "success": True,
+                "rows_replaced": succeeded,
+            }
+
+        return {
+            "success": True,
+            "rows_replaced": 0,
+        }
+
 
 # Global instance
 laserfiche_client = LaserficheClient()

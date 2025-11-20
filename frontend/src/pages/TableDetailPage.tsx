@@ -23,7 +23,6 @@ import {
   TextField,
   Snackbar,
   LinearProgress,
-  Chip,
 } from '@mui/material';
 import {
   Add,
@@ -41,9 +40,9 @@ import {
   updateTableRow,
   deleteTableRow,
   fetchTableSchema,
-  batchCreateRows,
+  replaceAllRows,
 } from '../services/api';
-import { BatchCreateResponse, ColumnInfo } from '../types';
+import { ReplaceAllResponse } from '../types';
 
 export default function TableDetailPage() {
   const { tableName } = useParams<{ tableName: string }>();
@@ -79,8 +78,9 @@ export default function TableDetailPage() {
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadResults, setUploadResults] = useState<BatchCreateResponse | null>(null);
-  const [resultsOpen, setResultsOpen] = useState(false);
+  const [replaceConfirmOpen, setReplaceConfirmOpen] = useState(false);
+  const [replaceResult, setReplaceResult] = useState<ReplaceAllResponse | null>(null);
+  const [resultOpen, setResultOpen] = useState(false);
 
   // Fetch table rows
   const {
@@ -172,16 +172,19 @@ export default function TableDetailPage() {
     setFilters((prev) => ({ ...prev, [column]: value }));
   };
 
-  // Download CSV
+  // Download CSV (excludes _key for Laserfiche compatibility)
   const handleDownloadCsv = () => {
     if (filteredRows.length === 0) return;
 
+    // Exclude _key column from download
+    const downloadColumns = columns.filter(col => col !== '_key');
+
     const csvContent = [
       // Header row
-      columns.join(','),
+      downloadColumns.join(','),
       // Data rows
       ...filteredRows.map((row) =>
-        columns
+        downloadColumns
           .map((col) => {
             const value = String(row[col] ?? '');
             // Escape quotes and wrap in quotes if contains comma or quote
@@ -341,11 +344,20 @@ export default function TableDetailPage() {
     event.target.value = '';
   };
 
-  // Handle upload execution
+  // Show replace confirmation dialog
+  const handleShowReplaceConfirm = () => {
+    setUploadOpen(false);
+    setReplaceConfirmOpen(true);
+  };
+
+  // Handle upload execution (replace all rows)
   const handleUploadConfirm = async () => {
     if (csvData.length === 0) return;
 
+    setReplaceConfirmOpen(false);
     setIsUploading(true);
+    setUploadOpen(true);
+
     try {
       // Strip _key from rows before uploading (it's auto-generated)
       const rowsToUpload = csvData.map(row => {
@@ -353,21 +365,21 @@ export default function TableDetailPage() {
         return rest;
       });
 
-      const results = await batchCreateRows(tableName!, rowsToUpload);
-      setUploadResults(results);
+      const result = await replaceAllRows(tableName!, rowsToUpload);
+      setReplaceResult(result);
       setUploadOpen(false);
-      setResultsOpen(true);
+      setResultOpen(true);
 
       // Refresh table data
       queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
 
-      if (results.failed === 0) {
-        setSnackbar({ open: true, message: `Successfully uploaded ${results.succeeded} rows`, severity: 'success' });
+      if (result.success) {
+        setSnackbar({ open: true, message: `Successfully replaced table with ${result.rows_replaced} rows`, severity: 'success' });
       } else {
-        setSnackbar({ open: true, message: `Uploaded ${results.succeeded} rows, ${results.failed} failed`, severity: 'error' });
+        setSnackbar({ open: true, message: result.error || 'Replace operation failed', severity: 'error' });
       }
     } catch (err) {
-      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Upload failed', severity: 'error' });
+      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Replace failed', severity: 'error' });
     } finally {
       setIsUploading(false);
     }
@@ -711,53 +723,74 @@ export default function TableDetailPage() {
             Cancel
           </Button>
           <Button
-            onClick={handleUploadConfirm}
+            onClick={handleShowReplaceConfirm}
             variant="contained"
+            color="warning"
             disabled={isUploading || uploadErrors.length > 0 || csvData.length === 0}
           >
-            {isUploading ? 'Uploading...' : `Upload ${csvData.length} Rows`}
+            {isUploading ? 'Uploading...' : `Replace Table with ${csvData.length} Rows`}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Upload Results Dialog */}
-      <Dialog open={resultsOpen} onClose={() => setResultsOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Upload Results</DialogTitle>
+      {/* Replace Confirmation Dialog */}
+      <Dialog open={replaceConfirmOpen} onClose={() => setReplaceConfirmOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Confirm Replace All Rows</DialogTitle>
         <DialogContent>
-          {uploadResults && (
-            <>
-              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                <Chip
-                  label={`${uploadResults.succeeded} Succeeded`}
-                  color="success"
-                  variant="outlined"
-                />
-                {uploadResults.failed > 0 && (
-                  <Chip
-                    label={`${uploadResults.failed} Failed`}
-                    color="error"
-                    variant="outlined"
-                  />
-                )}
-              </Box>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body1" fontWeight="bold">
+              This will DELETE ALL existing rows in the table!
+            </Typography>
+          </Alert>
+          <Typography variant="body2" paragraph>
+            You are about to replace all data in <strong>{tableName}</strong> with {csvData.length} rows from your CSV file.
+          </Typography>
+          <Typography variant="body2" paragraph>
+            This operation:
+          </Typography>
+          <Box component="ul" sx={{ pl: 2, mt: 0 }}>
+            <Typography component="li" variant="body2">Deletes all existing rows in the table</Typography>
+            <Typography component="li" variant="body2">Inserts {csvData.length} new rows from your CSV</Typography>
+            <Typography component="li" variant="body2">Cannot be undone</Typography>
+          </Box>
+          <Typography variant="body2" sx={{ mt: 2 }}>
+            Are you sure you want to continue?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReplaceConfirmOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUploadConfirm}
+            variant="contained"
+            color="error"
+          >
+            Yes, Replace All Rows
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-              {uploadResults.failed > 0 && (
-                <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
-                  <Typography variant="subtitle2" gutterBottom>Failed Rows:</Typography>
-                  {uploadResults.results
-                    .filter(r => !r.success)
-                    .map((r) => (
-                      <Alert severity="error" key={r.index} sx={{ mb: 1 }}>
-                        Row {r.index + 1}: {r.error}
-                      </Alert>
-                    ))}
-                </Box>
+      {/* Replace Results Dialog */}
+      <Dialog open={resultOpen} onClose={() => setResultOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Replace Results</DialogTitle>
+        <DialogContent>
+          {replaceResult && (
+            <>
+              {replaceResult.success ? (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  Successfully replaced table with {replaceResult.rows_replaced} rows
+                </Alert>
+              ) : (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {replaceResult.error || 'Replace operation failed'}
+                </Alert>
               )}
             </>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setResultsOpen(false)} variant="contained">
+          <Button onClick={() => setResultOpen(false)} variant="contained">
             Close
           </Button>
         </DialogActions>

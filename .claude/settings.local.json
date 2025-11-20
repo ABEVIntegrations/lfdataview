@@ -9,7 +9,8 @@
       "Bash(docker.exe ps:*)",
       "Bash(sudo docker ps:*)",
       "Bash(powershell.exe -Command \"docker logs --tail 50 lfdataview-backend\")",
-      "WebFetch(domain:developer.laserfiche.com)"
+      "WebFetch(domain:developer.laserfiche.com)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

@@ -6,6 +6,7 @@ import {
   RowResponse,
   TableSchemaResponse,
   BatchCreateResponse,
+  ReplaceAllResponse,
 } from '../types';
 
 const API_BASE = 'http://localhost:8000';
@@ -113,6 +114,16 @@ export async function batchCreateRows(
   rows: Record<string, unknown>[]
 ): Promise<BatchCreateResponse> {
   return fetchWithCredentials(`${API_BASE}/tables/${tableName}/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ rows }),
+  });
+}
+
+export async function replaceAllRows(
+  tableName: string,
+  rows: Record<string, unknown>[]
+): Promise<ReplaceAllResponse> {
+  return fetchWithCredentials(`${API_BASE}/tables/${tableName}/replace`, {
     method: 'POST',
     body: JSON.stringify({ rows }),
   });
