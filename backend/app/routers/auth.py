@@ -1,6 +1,7 @@
 """Authentication endpoints for OAuth flow."""
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -75,8 +76,11 @@ async def callback(
             user_agent=user_agent,
         )
 
-        # Set httpOnly cookie
-        response.set_cookie(
+        # Create redirect response to frontend
+        redirect_response = RedirectResponse(url="http://localhost:3000", status_code=302)
+
+        # Set httpOnly cookie on the redirect response
+        redirect_response.set_cookie(
             key="session_token",
             value=session_token,
             httponly=True,
@@ -85,10 +89,7 @@ async def callback(
             max_age=settings.SESSION_EXPIRY_DAYS * 24 * 60 * 60,  # Convert days to seconds
         )
 
-        return {
-            "message": "Authentication successful",
-            "redirect": "/",  # Frontend should redirect to home page
-        }
+        return redirect_response
 
     except HTTPException as e:
         raise e
