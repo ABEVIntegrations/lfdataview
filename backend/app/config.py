@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    FRONTEND_URL: str = "http://localhost:3000"  # Where to redirect after OAuth
 
     # Session
     SESSION_EXPIRY_DAYS: int = 7

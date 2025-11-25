@@ -77,7 +77,7 @@ async def callback(
         )
 
         # Create redirect response to frontend
-        redirect_response = RedirectResponse(url="http://localhost:3000", status_code=302)
+        redirect_response = RedirectResponse(url=settings.FRONTEND_URL, status_code=302)
 
         # Set httpOnly cookie on the redirect response
         redirect_response.set_cookie(
