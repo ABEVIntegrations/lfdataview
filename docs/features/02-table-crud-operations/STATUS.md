@@ -1,14 +1,14 @@
 # Feature: Table CRUD Operations
 
-**Status:** ⚠️ IMPLEMENTED - NEEDS TESTING
-**Progress:** 95%
-**Phase:** Phase 1 - MVP
+**Status:** Complete
+**Progress:** 100%
+**Phase:** Community Edition
 **Priority:** Critical
-**Last Updated:** 2025-11-19
+**Last Updated:** 2025-11-24
 
 ## Summary
 
-Implement complete CRUD (Create, Read, Update, Delete) operations for Laserfiche lookup tables using the OData Table API. This feature provides the core functionality of the application: viewing, creating, updating, and deleting table data.
+Complete CRUD (Create, Read, Update, Delete) operations for Laserfiche lookup tables using the OData Table API. This feature provides the core functionality of the application: viewing, creating, updating, and deleting table data.
 
 ## Completion Checklist
 
@@ -24,34 +24,31 @@ Implement complete CRUD (Create, Read, Update, Delete) operations for Laserfiche
   - [x] Error handling and transformation (httpx errors → HTTPException)
   - [x] Request validation with Pydantic (7 schemas)
 
-- [ ] Testing (Needs User Testing)
-  - [ ] Manual testing with real Laserfiche tables
-  - [ ] Verify all CRUD operations work
-  - [ ] Test pagination
-  - [ ] Test error scenarios
+- [x] Testing
+  - [x] Manual testing with real Laserfiche tables
+  - [x] All CRUD operations verified working
+  - [x] Pagination tested
+  - [x] Error scenarios tested
 
 - [x] Documentation
   - [x] Feature documentation
   - [x] API documentation (OpenAPI auto-generated)
   - [x] Code documentation (docstrings)
-  - [x] Test guide created (FEATURE_02_TEST_GUIDE.md)
 
-- [ ] Production deployment
-  - [ ] Backend restart required
-  - [ ] User testing needed
-  - [ ] Mark as complete after testing
+- [x] Production deployment
+  - [x] Deployed and operational
 
 ## Key Features Delivered
 
-- ✅ List all accessible tables
-- ✅ Read table rows with pagination (limit/offset)
-- ✅ Read single row by key
-- ✅ Create new table rows
-- ✅ Update existing table rows (PATCH)
-- ✅ Delete table rows
-- ✅ Authentication required for all endpoints
-- ✅ Automatic token refresh
-- ✅ Error handling for all scenarios (401, 403, 404, 409, 500)
+- List all accessible tables
+- Read table rows with pagination (limit/offset)
+- Read single row by key
+- Create new table rows
+- Update existing table rows (PATCH)
+- Delete table rows
+- Authentication required for all endpoints
+- Automatic token refresh
+- Error handling for all scenarios (401, 403, 404, 409, 500)
 
 ## Implementation Details
 
@@ -80,31 +77,6 @@ Implement complete CRUD (Create, Read, Update, Delete) operations for Laserfiche
 5. `PATCH /tables/{table_name}/{key}` - Update row
 6. `DELETE /tables/{table_name}/{key}` - Delete row
 
-**Authentication** (`backend/app/dependencies.py`)
-- Added `get_user_access_token()` dependency
-- Automatically refreshes expired tokens
-- Returns decrypted access token for API calls
-
-**Router Registration** (`backend/app/main.py`)
-- Tables router registered with `/tables` prefix
-- Auto-generated OpenAPI documentation
-
-### API Features
-
-- **Pagination:** Query parameters `limit` (1-1000) and `offset` (0+)
-- **Authentication:** All endpoints require valid session cookie
-- **Token Refresh:** Automatic and transparent to user
-- **Error Transformation:** Laserfiche errors mapped to HTTP status codes
-- **Validation:** Pydantic models validate all requests
-- **Documentation:** Auto-generated Swagger UI at `/docs`
-
-## Next Steps
-
-1. **Restart Backend:** `docker restart lfdataview-backend`
-2. **Test Endpoints:** Follow [FEATURE_02_TEST_GUIDE.md](../../../FEATURE_02_TEST_GUIDE.md)
-3. **Verify CRUD Operations:** Test with real Laserfiche tables
-4. **Mark Complete:** Update status once testing passes
-
 ## Dependencies
 
 **Blocks:** Feature 03 (UI needs these endpoints)
@@ -114,5 +86,4 @@ Implement complete CRUD (Create, Read, Update, Delete) operations for Laserfiche
 ## Related Documentation
 
 - [README.md](README.md) - Feature overview
-- [TODO.md](TODO.md) - Task breakdown
 - [API_DESIGN.md](API_DESIGN.md) - Endpoint specifications

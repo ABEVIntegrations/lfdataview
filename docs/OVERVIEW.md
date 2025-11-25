@@ -40,16 +40,30 @@ LF DataView is a web application for managing Laserfiche Cloud lookup tables. It
 | Deployment | Docker, Docker Compose |
 | API | Laserfiche OData Table API |
 
-## Current Features
+## Product Editions
+
+| Edition | Description | Status |
+|---------|-------------|--------|
+| **Community** | Free, self-hosted, single-tenant | MVP Complete |
+| **Managed** | Paid SaaS, multi-tenant (`*.lfdataview.com`) | Planned |
+
+See [Product Strategy](_planning/PRODUCT_STRATEGY.md) for details.
+
+## Current Features (Community Edition)
 
 | Feature | Status | Description |
 |---------|--------|-------------|
 | OAuth Authentication | Complete | Secure login via Laserfiche Cloud |
 | Table CRUD Operations | Complete | Full create, read, update, delete support |
 | Basic React UI | Complete | Table browsing, filtering, CSV import/export |
-| Multi-Tenancy | Planned | Support for multiple Laserfiche accounts |
-| Advanced UI | Planned | Sorting, advanced search, bulk operations |
-| DigitalOcean Deployment | Planned | One-click cloud deployment |
+
+## Planned Features (Managed Edition)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Multi-Tenancy | Planned | Subdomain per tenant, isolated data |
+| Advanced UI | Planned | Sorting, bulk operations, custom branding |
+| CapRover Deployment | Planned | Wildcard SSL, tenant management |
 
 ## Workflow Example
 
@@ -72,11 +86,14 @@ The application mirrors Laserfiche's native table management:
 
 ## Links
 
-- [Architecture](/_core/architecture.md)
-- [Tech Stack](/_core/tech_stack.md)
-- [API Reference](/_api/API_REFERENCE.md)
-- [Docker Deployment](/_deployment/DOCKER.md)
-- [Security Analysis](/_security/SECURITY_ANALYSIS.md)
+- [Project Status](00-RESUME-HERE.md)
+- [Product Strategy](_planning/PRODUCT_STRATEGY.md)
+- [Architecture](_core/architecture.md)
+- [Tech Stack](_core/tech_stack.md)
+- [API Reference](_api/API_REFERENCE.md)
+- [Docker Deployment](_deployment/DOCKER.md)
+- [Self-Hosting Guide](_deployment/SELF_HOSTING_GUIDE.md)
+- [Security Analysis](_security/SECURITY_ANALYSIS.md)
 
 ## Quick Start
 
