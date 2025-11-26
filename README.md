@@ -10,6 +10,16 @@ A self-hosted web application for viewing and managing Laserfiche Cloud lookup t
 - Column filtering with wildcard support
 - OAuth 2.0 authentication with Laserfiche Cloud
 
+## Security & Privacy
+
+**Your credentials stay with Laserfiche.** This application:
+
+- **Does not store passwords** - Authentication is handled entirely by Laserfiche Cloud via OAuth 2.0. Your password is never sent to or seen by this application.
+- **Does not have a database** - No user accounts, profiles, or personal information are stored.
+- **Only stores a temporary access token** - After you log in through Laserfiche, an encrypted access token is stored in a browser cookie for ~1 hour. This token is encrypted and cannot be read by JavaScript.
+
+When you log out or close your browser, the token is cleared. There is no persistent user data.
+
 ## Quick Start
 
 ### Prerequisites
