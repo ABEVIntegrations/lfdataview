@@ -1,8 +1,13 @@
 # LF DataView - Application Overview
 
+**Last Updated:** 2025-11-25
+**Version:** 1.0 (Community Edition)
+
 ## What is LF DataView?
 
 LF DataView is a web application for managing Laserfiche Cloud lookup tables. It provides a user-friendly interface for viewing, editing, and bulk-managing table data that would otherwise require direct access to Laserfiche administration tools.
+
+**Key Design:** The Community Edition uses stateless authentication with no database required.
 
 ## Key Capabilities
 
@@ -20,7 +25,7 @@ LF DataView is a web application for managing Laserfiche Cloud lookup tables. It
 
 ### Security
 - **OAuth 2.0 Authentication** - Secure login via Laserfiche Cloud
-- **Session Management** - Token refresh and secure cookie handling
+- **Encrypted Cookies** - Tokens encrypted with Fernet before storage
 - **User Permissions** - Respects Laserfiche table access permissions
 
 ## Target Users
@@ -36,7 +41,7 @@ LF DataView is a web application for managing Laserfiche Cloud lookup tables. It
 |-------|------------|
 | Frontend | React 18, TypeScript, Material-UI, React Query |
 | Backend | Python 3.11, FastAPI, Pydantic |
-| Authentication | OAuth 2.0 (Laserfiche Cloud) |
+| Authentication | OAuth 2.0 (Laserfiche Cloud), Stateless cookies |
 | Deployment | Docker, Docker Compose |
 | API | Laserfiche OData Table API |
 
@@ -44,10 +49,8 @@ LF DataView is a web application for managing Laserfiche Cloud lookup tables. It
 
 | Edition | Description | Status |
 |---------|-------------|--------|
-| **Community** | Free, self-hosted, single-tenant | MVP Complete |
+| **Community** | Free, self-hosted, single-tenant, no database | Complete |
 | **Managed** | Paid SaaS, multi-tenant (`*.lfdataview.com`) | Planned |
-
-See [Product Strategy](_planning/PRODUCT_STRATEGY.md) for details.
 
 ## Current Features (Community Edition)
 
@@ -63,7 +66,7 @@ See [Product Strategy](_planning/PRODUCT_STRATEGY.md) for details.
 |---------|--------|-------------|
 | Multi-Tenancy | Planned | Subdomain per tenant, isolated data |
 | Advanced UI | Planned | Sorting, bulk operations, custom branding |
-| CapRover Deployment | Planned | Wildcard SSL, tenant management |
+| PostgreSQL Backend | Planned | Database for session/tenant management |
 
 ## Workflow Example
 
@@ -86,24 +89,21 @@ The application mirrors Laserfiche's native table management:
 
 ## Links
 
-- [Project Status](00-RESUME-HERE.md)
-- [Product Strategy](_planning/PRODUCT_STRATEGY.md)
 - [Architecture](_core/architecture.md)
 - [Tech Stack](_core/tech_stack.md)
 - [API Reference](_api/API_REFERENCE.md)
 - [Docker Deployment](_deployment/DOCKER.md)
 - [Self-Hosting Guide](_deployment/SELF_HOSTING_GUIDE.md)
-- [Security Analysis](_security/SECURITY_ANALYSIS.md)
 
 ## Quick Start
 
 ```bash
 # Clone and start with Docker
-git clone <repository-url>
+git clone https://github.com/yourusername/lfdataview.git
 cd lfdataview
-cp .env.example .env
-# Edit .env with your Laserfiche OAuth credentials
+cp backend/.env.example backend/.env
+# Edit backend/.env with your Laserfiche OAuth credentials
 docker-compose up -d
 ```
 
-Access the application at `http://localhost:5173`
+Access the application at `http://localhost:3000`

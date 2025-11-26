@@ -1,16 +1,15 @@
 # API Reference
 
-**Last Updated:** 2025-11-18
+**Last Updated:** 2025-11-25
 **Base URL:** `http://localhost:8000` (development)
+**Version:** 1.0 (Community Edition)
 
 ## Authentication Endpoints
 
-See [Feature 01: OAuth Authentication](../features/01-oauth-authentication/README.md)
-
-- `GET /auth/login` - Initiate OAuth flow
-- `GET /auth/callback` - OAuth callback handler
-- `POST /auth/logout` - Logout user
-- `GET /auth/me` - Get current user info
+- `GET /auth/login` - Initiate OAuth flow (returns redirect URL, sets state cookie)
+- `GET /auth/callback` - OAuth callback handler (exchanges code, sets token cookie)
+- `POST /auth/logout` - Logout user (clears cookies)
+- `GET /auth/status` - Check if user is authenticated
 
 ## Table Endpoints
 

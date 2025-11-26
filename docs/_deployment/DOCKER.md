@@ -1,10 +1,13 @@
 # Docker Development Setup
 
-**Last Updated:** 2025-11-18
+**Last Updated:** 2025-11-25
+**Version:** 1.0 (Community Edition - Stateless)
 
 ## Overview
 
-Use Docker Compose for local development with PostgreSQL, FastAPI, and React.
+Use Docker Compose for local development with FastAPI backend and React frontend.
+
+**Note:** The Community Edition uses stateless authentication (no database required).
 
 ## Prerequisites
 
@@ -27,13 +30,9 @@ cp frontend/.env.example frontend/.env
 # 4. Start all services
 docker-compose up -d
 
-# 5. Run database migrations
-docker-compose exec backend alembic upgrade head
-
-# 6. Access application
+# 5. Access application
 # Frontend: http://localhost:3000
 # Backend API docs: http://localhost:8000/docs
-# PostgreSQL: localhost:5432
 ```
 
 ## Docker Compose Configuration
@@ -44,36 +43,12 @@ docker-compose exec backend alembic upgrade head
 version: '3.9'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: lfdataview
-      POSTGRES_USER: lfdataview
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lfdataview"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgresql://lfdataview:${DB_PASSWORD}@postgres/lfdataview
-      LASERFICHE_CLIENT_ID: ${LASERFICHE_CLIENT_ID}
-      LASERFICHE_CLIENT_SECRET: ${LASERFICHE_CLIENT_SECRET}
-      LASERFICHE_REDIRECT_URI: ${LASERFICHE_REDIRECT_URI}
-      SECRET_KEY: ${SECRET_KEY}
-      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
-    depends_on:
-      postgres:
-        condition: service_healthy
+    env_file:
+      - ./backend/.env
     ports:
       - "8000:8000"
     volumes:
@@ -83,18 +58,15 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
-    environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      dockerfile: Dockerfile
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev
+      - "3000:80"
+    depends_on:
+      - backend
 
-volumes:
-  postgres_data:
+networks:
+  lfdataview-network:
+    driver: bridge
 ```
 
 ## Backend Dockerfile
@@ -106,15 +78,20 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
 COPY . .
 
-# Run migrations and start server
-CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Start server
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ## Frontend Dockerfile (Development)
@@ -150,14 +127,8 @@ docker-compose restart backend
 # Stop all services
 docker-compose down
 
-# Stop and remove volumes (fresh start)
-docker-compose down -v
-
-# Run migrations
-docker-compose exec backend alembic upgrade head
-
-# Access PostgreSQL
-docker-compose exec postgres psql -U lfdataview -d lfdataview
+# Rebuild and restart
+docker-compose up -d --build
 
 # Run backend tests
 docker-compose exec backend pytest
@@ -166,18 +137,44 @@ docker-compose exec backend pytest
 docker-compose exec frontend npm run test
 ```
 
+## Environment Variables
+
+### Backend (.env)
+
+```bash
+# Laserfiche OAuth
+LASERFICHE_CLIENT_ID=your_client_id
+LASERFICHE_CLIENT_SECRET=your_client_secret
+LASERFICHE_REDIRECT_URI=http://localhost:8000/auth/callback
+
+# Security (generate with: openssl rand -hex 32)
+SECRET_KEY=your_random_secret_key
+
+# Token encryption (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+TOKEN_ENCRYPTION_KEY=your_fernet_key
+
+# App Config
+DEBUG=true
+ENVIRONMENT=development
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+```
+
+### Frontend (.env)
+
+```bash
+VITE_API_BASE_URL=http://localhost:8000
+```
+
 ## Troubleshooting
 
 ### Backend won't start
 - Check `.env` file has all required variables
-- Check database connection: `docker-compose logs postgres`
-- Check migrations: `docker-compose exec backend alembic current`
+- Check logs: `docker-compose logs backend`
 
 ### Frontend won't start
 - Check `VITE_API_BASE_URL` in frontend/.env
-- Clear node_modules: `docker-compose down && docker-compose up --build`
+- Clear and rebuild: `docker-compose down && docker-compose up --build`
 
-### Database connection refused
-- Ensure postgres service is healthy: `docker-compose ps`
-- Check DATABASE_URL format
-
+### OAuth redirect fails
+- Ensure `LASERFICHE_REDIRECT_URI` matches your Laserfiche app registration
+- Check CORS: `ALLOWED_ORIGINS` should include your frontend URL

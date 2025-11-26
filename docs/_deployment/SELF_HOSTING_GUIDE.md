@@ -1,10 +1,11 @@
 # Self-Hosting Guide
 
-**Last Updated:** 2025-11-18
+**Last Updated:** 2025-11-25
+**Version:** 1.0 (Community Edition - Stateless)
 
 ## Overview
 
-Guide for deploying Laserfiche Data View as a single-tenant application on your own server.
+Guide for deploying LF DataView on your own server. The Community Edition uses stateless authentication with no database required.
 
 ## Prerequisites
 
@@ -55,51 +56,53 @@ nano backend/.env
 
 **Edit backend/.env:**
 ```bash
-DATABASE_URL=postgresql://lfdataview:CHANGE_ME_STRONG_PASSWORD@postgres/lfdataview
+# Laserfiche OAuth
 LASERFICHE_CLIENT_ID=your_client_id_from_step_1
 LASERFICHE_CLIENT_SECRET=your_client_secret_from_step_1
 LASERFICHE_REDIRECT_URI=https://yourdomain.com/auth/callback
-SECRET_KEY=$(openssl rand -hex 32)
-TOKEN_ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+
+# Security - generate these keys!
+SECRET_KEY=run_this_command: openssl rand -hex 32
+TOKEN_ENCRYPTION_KEY=run_this_command: python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Production settings
 ENVIRONMENT=production
+DEBUG=false
 ALLOWED_ORIGINS=https://yourdomain.com
-```
-
-**Create docker-compose.override.yml for production:**
-```yaml
-version: '3.9'
-
-services:
-  backend:
-    environment:
-      - ENVIRONMENT=production
-    restart: unless-stopped
-
-  frontend:
-    restart: unless-stopped
-
-  postgres:
-    restart: unless-stopped
 ```
 
 ## Step 4: Deploy with Caddy (Auto-HTTPS)
 
 **Create Caddyfile:**
-```
+```caddyfile
 yourdomain.com {
+    # Proxy API requests to backend
+    reverse_proxy /auth/* backend:8000
+    reverse_proxy /tables/* backend:8000
+    reverse_proxy /health backend:8000
+
     # Serve React SPA
     root * /var/www/html
     try_files {path} /index.html
     file_server
-
-    # Proxy API requests
-    reverse_proxy /api/* backend:8000
-    reverse_proxy /auth/* backend:8000
 }
 ```
 
-**Add Caddy to docker-compose.yml:**
+**Create docker-compose.prod.yml:**
 ```yaml
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
+    restart: unless-stopped
+    networks:
+      - lfdataview-network
+
   caddy:
     image: caddy:2-alpine
     ports:
@@ -112,8 +115,13 @@ yourdomain.com {
       - caddy_config:/config
     depends_on:
       - backend
-      - frontend
     restart: unless-stopped
+    networks:
+      - lfdataview-network
+
+networks:
+  lfdataview-network:
+    driver: bridge
 
 volumes:
   caddy_data:
@@ -130,13 +138,10 @@ npm run build
 
 # Start services
 cd ..
-docker compose up -d
-
-# Run database migrations
-docker compose exec backend alembic upgrade head
+docker compose -f docker-compose.prod.yml up -d
 
 # Check logs
-docker compose logs -f
+docker compose -f docker-compose.prod.yml logs -f
 ```
 
 ## Step 6: Verify Deployment
@@ -148,32 +153,42 @@ docker compose logs -f
 
 ## Maintenance
 
-### Backup Database
-```bash
-# Backup
-docker compose exec postgres pg_dump -U lfdataview lfdataview > backup_$(date +%Y%m%d).sql
-
-# Restore
-cat backup_20251118.sql | docker compose exec -T postgres psql -U lfdataview lfdataview
-```
-
 ### Update Application
 ```bash
 git pull
-docker compose down
-docker compose up -d --build
-docker compose exec backend alembic upgrade head
+docker compose -f docker-compose.prod.yml down
+cd frontend && npm run build && cd ..
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ### View Logs
 ```bash
-docker compose logs -f backend
+docker compose -f docker-compose.prod.yml logs -f backend
+```
+
+### Restart Services
+```bash
+docker compose -f docker-compose.prod.yml restart
 ```
 
 ## Troubleshooting
 
-**OAuth redirect fails:** Check `LASERFICHE_REDIRECT_URI` matches Developer Console
+**OAuth redirect fails:**
+- Check `LASERFICHE_REDIRECT_URI` matches Developer Console exactly
+- Ensure HTTPS is working (Caddy handles this automatically)
 
-**Database connection error:** Check `DATABASE_URL` and postgres service status
+**HTTPS not working:**
+- Ensure ports 80 and 443 are open in firewall
+- Check Caddy logs: `docker compose logs caddy`
+- Ensure domain DNS points to your server
 
-**HTTPS not working:** Ensure port 80 and 443 are open in firewall
+**Session expires quickly:**
+- This is expected behavior - Laserfiche tokens expire after ~1 hour
+- Users simply log in again when needed
+
+## Security Notes
+
+- Tokens are encrypted with Fernet before storing in cookies
+- OAuth state is signed with HMAC-SHA256 to prevent CSRF
+- All cookies are httpOnly (not accessible via JavaScript)
+- In production, cookies are marked Secure (HTTPS only)
