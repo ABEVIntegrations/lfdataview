@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 import httpx
 
 from app.dependencies import get_user_access_token
+from app.config import settings
 from app.schemas.table import (
     TableListResponse,
     TableRowsResponse,
@@ -26,49 +27,52 @@ from app.utils.laserfiche import laserfiche_client
 router = APIRouter()
 
 
-@router.get(
-    "/debug",
-    summary="Debug table API",
-    description="Debug endpoint to see raw Laserfiche API response and access token",
-)
-async def debug_tables(
-    access_token: str = Depends(get_user_access_token),
-):
-    """Debug endpoint to test Laserfiche Table API.
+# Debug endpoint - only available when DEBUG=True
+if settings.DEBUG:
+    @router.get(
+        "/debug",
+        summary="Debug table API (DEV ONLY)",
+        description="Debug endpoint - DISABLED IN PRODUCTION",
+        include_in_schema=settings.DEBUG,
+    )
+    async def debug_tables(
+        access_token: str = Depends(get_user_access_token),
+    ):
+        """Debug endpoint to test Laserfiche Table API.
 
-    Returns raw response from Laserfiche and the access token for Postman testing.
-    """
-    import logging
-    logger = logging.getLogger(__name__)
+        WARNING: Only available in development mode.
+        Does NOT expose access tokens.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
 
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Accept": "application/json",
-    }
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
 
-    url = "https://api.laserfiche.com/odata4/table"
+        url = "https://api.laserfiche.com/odata4/table"
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers)
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers)
 
-            logger.info(f"Debug - URL: {url}")
-            logger.info(f"Debug - Status: {response.status_code}")
-            logger.info(f"Debug - Response: {response.text[:500]}")
+                logger.info(f"Debug - URL: {url}")
+                logger.info(f"Debug - Status: {response.status_code}")
+                logger.info(f"Debug - Response: {response.text[:500]}")
 
+                return {
+                    "url": url,
+                    "status_code": response.status_code,
+                    "response_headers": dict(response.headers),
+                    "response_body": response.json() if response.status_code == 200 else response.text,
+                    # SECURITY: Never expose access tokens, even in debug mode
+                }
+        except Exception as e:
             return {
                 "url": url,
-                "status_code": response.status_code,
-                "response_headers": dict(response.headers),
-                "response_body": response.json() if response.status_code == 200 else response.text,
-                "access_token_for_postman": access_token,  # Use this in Postman!
+                "error": str(e),
             }
-    except Exception as e:
-        return {
-            "url": url,
-            "error": str(e),
-            "access_token_for_postman": access_token,
-        }
 
 
 def handle_laserfiche_error(e: httpx.HTTPStatusError) -> HTTPException:

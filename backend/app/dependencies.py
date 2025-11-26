@@ -1,85 +1,55 @@
-"""FastAPI dependencies for authentication and database sessions."""
+"""FastAPI dependencies for authentication."""
 
-from fastapi import Cookie, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import Cookie, HTTPException
 from typing import Optional
 
-from app.database import get_db
-from app.models import User
-from app.services.auth_service import get_user_from_session
+from app.utils.security import decrypt_token
 
 
-async def get_current_user(
-    session_token: Optional[str] = Cookie(None),
-    db: Session = Depends(get_db),
-) -> User:
-    """Dependency to get the current authenticated user from session cookie.
+async def get_user_access_token(
+    lf_token: Optional[str] = Cookie(None),
+) -> str:
+    """Get decrypted access token from cookie.
 
     Args:
-        session_token: Session token from cookie
-        db: Database session
+        lf_token: Encrypted access token from cookie
 
     Returns:
-        User object if authenticated
+        Decrypted access token
 
     Raises:
-        HTTPException: 401 if not authenticated or session invalid
+        HTTPException: 401 if not authenticated or token invalid
     """
-    if not session_token:
+    if not lf_token:
         raise HTTPException(
             status_code=401,
             detail="Not authenticated. Please log in.",
         )
 
-    user = get_user_from_session(session_token, db)
-    return user
+    try:
+        return decrypt_token(lf_token)
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token. Please log in again.",
+        )
 
 
-async def get_current_user_optional(
-    session_token: Optional[str] = Cookie(None),
-    db: Session = Depends(get_db),
-) -> Optional[User]:
-    """Optional authentication dependency.
-
-    Returns User if authenticated, None otherwise.
-    Does not raise exception if not authenticated.
+async def get_user_access_token_optional(
+    lf_token: Optional[str] = Cookie(None),
+) -> Optional[str]:
+    """Optional authentication - returns token or None.
 
     Args:
-        session_token: Session token from cookie
-        db: Database session
+        lf_token: Encrypted access token from cookie
 
     Returns:
-        User object if authenticated, None otherwise
+        Decrypted access token if valid, None otherwise
     """
-    if not session_token:
+    if not lf_token:
         return None
 
     try:
-        user = get_user_from_session(session_token, db)
-        return user
-    except HTTPException:
+        return decrypt_token(lf_token)
+    except Exception:
         return None
-
-
-async def get_user_access_token(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> str:
-    """Dependency to get a valid access token for the current user.
-
-    Automatically refreshes the token if expired.
-
-    Args:
-        current_user: Current authenticated user
-        db: Database session
-
-    Returns:
-        Valid access token (decrypted)
-
-    Raises:
-        HTTPException: If token refresh fails
-    """
-    from app.services.auth_service import refresh_user_token
-
-    access_token = await refresh_user_token(str(current_user.id), db)
-    return access_token

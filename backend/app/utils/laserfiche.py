@@ -335,6 +335,9 @@ class LaserficheClient:
                 json=data,
             )
             response.raise_for_status()
+            # PATCH may return 204 No Content or JSON
+            if response.status_code == 204 or not response.content:
+                return data  # Return the updated data we sent
             return response.json()
 
     async def delete_table_row(

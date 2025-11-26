@@ -179,9 +179,7 @@ async def test_page():
                         showStatus('✅ You are authenticated!', 'success');
                         document.getElementById('user-info').innerHTML = `
                             <div class="user-info">
-                                <strong>User Info:</strong><br>
-                                ID: ${data.user.id}<br>
-                                Username: ${data.user.username}
+                                <strong>Status:</strong> Logged in with valid token
                             </div>
                         `;
                     } else {

@@ -23,6 +23,9 @@ import {
   TextField,
   Snackbar,
   LinearProgress,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
 import {
   Add,
@@ -41,8 +44,9 @@ import {
   deleteTableRow,
   fetchTableSchema,
   replaceAllRows,
+  batchCreateRows,
 } from '../services/api';
-import { ReplaceAllResponse } from '../types';
+import { ReplaceAllResponse, BatchCreateResponse } from '../types';
 
 export default function TableDetailPage() {
   const { tableName } = useParams<{ tableName: string }>();
@@ -78,9 +82,10 @@ export default function TableDetailPage() {
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [replaceConfirmOpen, setReplaceConfirmOpen] = useState(false);
-  const [replaceResult, setReplaceResult] = useState<ReplaceAllResponse | null>(null);
+  const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
+  const [uploadResult, setUploadResult] = useState<ReplaceAllResponse | BatchCreateResponse | null>(null);
   const [resultOpen, setResultOpen] = useState(false);
+  const [uploadMode, setUploadMode] = useState<'append' | 'replace'>('append');
 
   // Fetch table rows
   const {
@@ -344,17 +349,17 @@ export default function TableDetailPage() {
     event.target.value = '';
   };
 
-  // Show replace confirmation dialog
-  const handleShowReplaceConfirm = () => {
+  // Show upload confirmation dialog
+  const handleShowUploadConfirm = () => {
     setUploadOpen(false);
-    setReplaceConfirmOpen(true);
+    setUploadConfirmOpen(true);
   };
 
-  // Handle upload execution (replace all rows)
+  // Handle upload execution (append or replace)
   const handleUploadConfirm = async () => {
     if (csvData.length === 0) return;
 
-    setReplaceConfirmOpen(false);
+    setUploadConfirmOpen(false);
     setIsUploading(true);
     setUploadOpen(true);
 
@@ -365,21 +370,37 @@ export default function TableDetailPage() {
         return rest;
       });
 
-      const result = await replaceAllRows(tableName!, rowsToUpload);
-      setReplaceResult(result);
-      setUploadOpen(false);
-      setResultOpen(true);
+      if (uploadMode === 'append') {
+        const result = await batchCreateRows(tableName!, rowsToUpload);
+        setUploadResult(result);
+        setUploadOpen(false);
+        setResultOpen(true);
 
-      // Refresh table data
-      queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
+        // Refresh table data
+        queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
 
-      if (result.success) {
-        setSnackbar({ open: true, message: `Successfully replaced table with ${result.rows_replaced} rows`, severity: 'success' });
+        if (result.failed === 0) {
+          setSnackbar({ open: true, message: `Successfully added ${result.succeeded} rows`, severity: 'success' });
+        } else {
+          setSnackbar({ open: true, message: `Added ${result.succeeded} rows, ${result.failed} failed`, severity: 'error' });
+        }
       } else {
-        setSnackbar({ open: true, message: result.error || 'Replace operation failed', severity: 'error' });
+        const result = await replaceAllRows(tableName!, rowsToUpload);
+        setUploadResult(result);
+        setUploadOpen(false);
+        setResultOpen(true);
+
+        // Refresh table data
+        queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
+
+        if (result.success) {
+          setSnackbar({ open: true, message: `Successfully replaced table with ${result.rows_replaced} rows`, severity: 'success' });
+        } else {
+          setSnackbar({ open: true, message: result.error || 'Replace operation failed', severity: 'error' });
+        }
       }
     } catch (err) {
-      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Replace failed', severity: 'error' });
+      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Upload failed', severity: 'error' });
     } finally {
       setIsUploading(false);
     }
@@ -582,17 +603,19 @@ export default function TableDetailPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Delete Row</DialogTitle>
         <DialogContent>
           <Typography>
             Are you sure you want to delete this row? This action cannot be undone.
           </Typography>
           {selectedRow && (
-            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-              <Typography variant="body2">
-                <strong>{primaryKey}:</strong> {String(selectedRow[primaryKey])}
-              </Typography>
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1, maxHeight: 300, overflow: 'auto' }}>
+              {columns.map((column) => (
+                <Typography key={column} variant="body2" sx={{ mb: 0.5 }}>
+                  <strong>{column}:</strong> {String(selectedRow[column] ?? '')}
+                </Typography>
+              ))}
             </Box>
           )}
         </DialogContent>
@@ -679,6 +702,26 @@ export default function TableDetailPage() {
             <strong>Rows to upload:</strong> {csvData.length}
           </Typography>
 
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>Upload Mode:</Typography>
+            <RadioGroup
+              row
+              value={uploadMode}
+              onChange={(e) => setUploadMode(e.target.value as 'append' | 'replace')}
+            >
+              <FormControlLabel
+                value="append"
+                control={<Radio />}
+                label="Append rows (add to existing data)"
+              />
+              <FormControlLabel
+                value="replace"
+                control={<Radio />}
+                label="Replace all (delete existing & insert new)"
+              />
+            </RadioGroup>
+          </Box>
+
           {csvData.length > 0 && (
             <Box sx={{ maxHeight: 300, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
               <Table size="small">
@@ -723,68 +766,120 @@ export default function TableDetailPage() {
             Cancel
           </Button>
           <Button
-            onClick={handleShowReplaceConfirm}
+            onClick={handleShowUploadConfirm}
             variant="contained"
-            color="warning"
+            color={uploadMode === 'replace' ? 'warning' : 'primary'}
             disabled={isUploading || uploadErrors.length > 0 || csvData.length === 0}
           >
-            {isUploading ? 'Uploading...' : `Replace Table with ${csvData.length} Rows`}
+            {isUploading
+              ? 'Uploading...'
+              : uploadMode === 'append'
+                ? `Add ${csvData.length} Rows`
+                : `Replace Table with ${csvData.length} Rows`}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Replace Confirmation Dialog */}
-      <Dialog open={replaceConfirmOpen} onClose={() => setReplaceConfirmOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Replace All Rows</DialogTitle>
+      {/* Upload Confirmation Dialog */}
+      <Dialog open={uploadConfirmOpen} onClose={() => setUploadConfirmOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {uploadMode === 'append' ? 'Confirm Add Rows' : 'Confirm Replace All Rows'}
+        </DialogTitle>
         <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="body1" fontWeight="bold">
-              This will DELETE ALL existing rows in the table!
-            </Typography>
-          </Alert>
-          <Typography variant="body2" paragraph>
-            You are about to replace all data in <strong>{tableName}</strong> with {csvData.length} rows from your CSV file.
-          </Typography>
-          <Typography variant="body2" paragraph>
-            This operation:
-          </Typography>
-          <Box component="ul" sx={{ pl: 2, mt: 0 }}>
-            <Typography component="li" variant="body2">Deletes all existing rows in the table</Typography>
-            <Typography component="li" variant="body2">Inserts {csvData.length} new rows from your CSV</Typography>
-            <Typography component="li" variant="body2">Cannot be undone</Typography>
-          </Box>
+          {uploadMode === 'replace' ? (
+            <>
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="body1" fontWeight="bold">
+                  This will DELETE ALL existing rows in the table!
+                </Typography>
+              </Alert>
+              <Typography variant="body2" paragraph>
+                You are about to replace all data in <strong>{tableName}</strong> with {csvData.length} rows from your CSV file.
+              </Typography>
+              <Typography variant="body2" paragraph>
+                This operation:
+              </Typography>
+              <Box component="ul" sx={{ pl: 2, mt: 0 }}>
+                <Typography component="li" variant="body2">Deletes all existing rows in the table</Typography>
+                <Typography component="li" variant="body2">Inserts {csvData.length} new rows from your CSV</Typography>
+                <Typography component="li" variant="body2">Cannot be undone</Typography>
+              </Box>
+            </>
+          ) : (
+            <>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body1">
+                  Adding {csvData.length} new rows to the table
+                </Typography>
+              </Alert>
+              <Typography variant="body2" paragraph>
+                You are about to add {csvData.length} new rows to <strong>{tableName}</strong> from your CSV file.
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Existing data will not be modified.
+              </Typography>
+            </>
+          )}
           <Typography variant="body2" sx={{ mt: 2 }}>
             Are you sure you want to continue?
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setReplaceConfirmOpen(false)}>
+          <Button onClick={() => setUploadConfirmOpen(false)}>
             Cancel
           </Button>
           <Button
             onClick={handleUploadConfirm}
             variant="contained"
-            color="error"
+            color={uploadMode === 'replace' ? 'error' : 'primary'}
           >
-            Yes, Replace All Rows
+            {uploadMode === 'append' ? `Yes, Add ${csvData.length} Rows` : 'Yes, Replace All Rows'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Replace Results Dialog */}
+      {/* Upload Results Dialog */}
       <Dialog open={resultOpen} onClose={() => setResultOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Replace Results</DialogTitle>
+        <DialogTitle>Upload Results</DialogTitle>
         <DialogContent>
-          {replaceResult && (
+          {uploadResult && (
             <>
-              {replaceResult.success ? (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  Successfully replaced table with {replaceResult.rows_replaced} rows
-                </Alert>
+              {'success' in uploadResult ? (
+                // ReplaceAllResponse
+                uploadResult.success ? (
+                  <Alert severity="success" sx={{ mb: 2 }}>
+                    Successfully replaced table with {uploadResult.rows_replaced} rows
+                  </Alert>
+                ) : (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {uploadResult.error || 'Replace operation failed'}
+                  </Alert>
+                )
               ) : (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {replaceResult.error || 'Replace operation failed'}
-                </Alert>
+                // BatchCreateResponse
+                <>
+                  {uploadResult.failed === 0 ? (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      Successfully added {uploadResult.succeeded} rows
+                    </Alert>
+                  ) : (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      Added {uploadResult.succeeded} of {uploadResult.total} rows ({uploadResult.failed} failed)
+                    </Alert>
+                  )}
+                  {uploadResult.failed > 0 && uploadResult.results && (
+                    <Box sx={{ mt: 2, maxHeight: 200, overflow: 'auto' }}>
+                      <Typography variant="subtitle2" gutterBottom>Failed rows:</Typography>
+                      {uploadResult.results
+                        .filter(r => !r.success)
+                        .map((r, idx) => (
+                          <Typography key={idx} variant="body2" color="error">
+                            Row {r.index + 1}: {r.error}
+                          </Typography>
+                        ))}
+                    </Box>
+                  )}
+                </>
               )}
             </>
           )}
