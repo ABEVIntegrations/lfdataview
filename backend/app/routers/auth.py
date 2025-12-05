@@ -84,6 +84,7 @@ async def callback(
 
     # Exchange code for token
     token_response = await auth_service.exchange_code_for_token(code)
+    logger.info(f"Token response keys: {token_response.keys()}")
 
     # Get token expiry (default 1 hour)
     expires_in = token_response.get("expires_in", 3600)

@@ -9,8 +9,9 @@ import {
   CircularProgress,
   Typography,
   Alert,
+  Link,
 } from '@mui/material';
-import { Login, TableChart } from '@mui/icons-material';
+import { Login } from '@mui/icons-material';
 import { getAuthStatus, initiateLogin } from '../services/api';
 
 export default function LoginPage() {
@@ -55,19 +56,22 @@ export default function LoginPage() {
   return (
     <Box
       display="flex"
+      flexDirection="column"
       justifyContent="center"
       alignItems="center"
       minHeight="100vh"
-      sx={{ backgroundColor: '#f5f5f5' }}
+      sx={{ backgroundColor: '#f7f7f8' }}
     >
       <Card sx={{ maxWidth: 400, width: '100%', mx: 2 }}>
         <CardContent sx={{ textAlign: 'center', py: 4 }}>
-          <TableChart sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
-          <Typography variant="h4" component="h1" gutterBottom>
-            Laserfiche Data View
-          </Typography>
+          <Box
+            component="img"
+            src="/logo.svg"
+            alt="LF DataView"
+            sx={{ height: 40, mb: 2 }}
+          />
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Sign in with your Laserfiche account to view and manage table data.
+            Sign in with your Laserfiche account to view and manage lookup tables.
           </Typography>
 
           {error && (
@@ -88,6 +92,18 @@ export default function LoginPage() {
           </Button>
         </CardContent>
       </Card>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 3 }}>
+        Community Edition by{' '}
+        <Link
+          href="https://abevintegrations.com"
+          target="_blank"
+          rel="noopener"
+          color="primary"
+          underline="hover"
+        >
+          ABEV Integrations
+        </Link>
+      </Typography>
     </Box>
   );
 }

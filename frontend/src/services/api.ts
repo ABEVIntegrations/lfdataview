@@ -57,12 +57,26 @@ export async function fetchTables(): Promise<TableListResponse> {
 export async function fetchTableRows(
   tableName: string,
   limit: number = 50,
-  offset: number = 0
+  offset: number = 0,
+  filters?: Record<string, string>,
+  filterMode: 'and' | 'or' = 'and'
 ): Promise<TableRowsResponse> {
   const params = new URLSearchParams({
     limit: limit.toString(),
     offset: offset.toString(),
   });
+
+  // Add filters if any non-empty values exist
+  if (filters) {
+    const activeFilters = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value && value.trim())
+    );
+    if (Object.keys(activeFilters).length > 0) {
+      params.set('filters', JSON.stringify(activeFilters));
+      params.set('filter_mode', filterMode);
+    }
+  }
+
   return fetchWithCredentials(`${API_BASE}/tables/${tableName}?${params}`);
 }
 
