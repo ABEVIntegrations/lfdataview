@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 36">
+  <!-- 3x3 Grid Icon (white with varying opacity) -->
+  <!-- Row 1 -->
+  <rect x="0" y="0" width="10" height="10" fill="white" opacity="0.6"/>
+  <rect x="13" y="0" width="10" height="10" fill="white" opacity="0.75"/>
+  <rect x="26" y="0" width="10" height="10" fill="white" opacity="0.9"/>
+  <!-- Row 2 -->
+  <rect x="0" y="13" width="10" height="10" fill="white" opacity="0.75"/>
+  <rect x="13" y="13" width="10" height="10" fill="white" opacity="0.9"/>
+  <rect x="26" y="13" width="10" height="10" fill="white"/>
+  <!-- Row 3 -->
+  <rect x="0" y="26" width="10" height="10" fill="white" opacity="0.85"/>
+  <rect x="13" y="26" width="10" height="10" fill="white"/>
+  <rect x="26" y="26" width="10" height="10" fill="white"/>
+
+  <!-- Text: LFdataview -->
+  <text x="46" y="27" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="500" fill="white">LFdataview</text>
+</svg>

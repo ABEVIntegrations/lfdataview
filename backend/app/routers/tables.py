@@ -1,7 +1,8 @@
 """API endpoints for table CRUD operations."""
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+import json
 import httpx
 
 from app.dependencies import get_user_access_token
@@ -163,31 +164,55 @@ async def list_tables(
     "/{table_name}",
     response_model=TableRowsResponse,
     summary="Get table rows",
-    description="Get rows from a table with pagination support",
+    description="Get rows from a table with pagination and filtering support",
 )
 async def get_table_rows(
     table_name: str,
     limit: int = Query(50, ge=1, le=1000, description="Number of rows per page"),
     offset: int = Query(0, ge=0, description="Number of rows to skip"),
+    filters: Optional[str] = Query(None, description="JSON-encoded filter object {column: value}"),
+    filter_mode: str = Query("and", description="Filter logic: 'and' (all must match) or 'or' (any must match)"),
     access_token: str = Depends(get_user_access_token),
 ) -> TableRowsResponse:
-    """Get rows from a table with pagination.
+    """Get rows from a table with pagination and filtering.
 
     Args:
         table_name: Name of the table
         limit: Number of rows per page (max: 1000)
         offset: Number of rows to skip
+        filters: JSON-encoded filter object (e.g., {"Name": "test", "Status": "Active"})
+        filter_mode: Filter logic - "and" (all must match) or "or" (any must match)
         access_token: User's access token (from dependency)
 
     Returns:
         Paginated rows with metadata
     """
+    # Parse filters JSON if provided
+    filter_dict: Optional[Dict[str, str]] = None
+    if filters:
+        try:
+            filter_dict = json.loads(filters)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid filters format. Must be valid JSON.",
+            )
+
+    # Validate filter_mode
+    if filter_mode not in ("and", "or"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="filter_mode must be 'and' or 'or'.",
+        )
+
     try:
         data = await laserfiche_client.get_table_rows(
             access_token=access_token,
             table_name=table_name,
             limit=limit,
             offset=offset,
+            filters=filter_dict,
+            filter_mode=filter_mode,
         )
 
         return TableRowsResponse(**data)

@@ -7,9 +7,11 @@ import {
   Toolbar,
   Typography,
   Button,
-  IconButton,
+  Chip,
+  Link,
+  Stack,
 } from '@mui/material';
-import { TableChart, Logout } from '@mui/icons-material';
+import { Logout } from '@mui/icons-material';
 import { logout } from '../services/api';
 
 export default function Layout() {
@@ -27,26 +29,29 @@ export default function Layout() {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="static">
         <Toolbar>
-          <IconButton
-            size="large"
-            edge="start"
-            color="inherit"
-            sx={{ mr: 2 }}
+          <Box
+            component="img"
+            src="/logo-white.svg"
+            alt="LF DataView"
+            sx={{
+              height: 28,
+              cursor: 'pointer',
+            }}
             onClick={() => navigate('/')}
-          >
-            <TableChart />
-          </IconButton>
-          <Typography
-            variant="h6"
-            component="div"
-            sx={{ flexGrow: 1, cursor: 'pointer' }}
-            onClick={() => navigate('/')}
-          >
-            Laserfiche Data View
-          </Typography>
+          />
+          <Chip
+            label="Community Edition"
+            size="small"
+            sx={{
+              ml: 1,
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
+              color: 'white',
+            }}
+          />
+          <Box sx={{ flexGrow: 1 }} />
           <Button
             color="inherit"
             startIcon={<Logout />}
@@ -62,15 +67,58 @@ export default function Layout() {
       <Box
         component="footer"
         sx={{
-          py: 2,
+          py: 3,
           px: 2,
           mt: 'auto',
-          backgroundColor: (theme) => theme.palette.grey[200],
+          backgroundColor: (theme) => theme.palette.grey[900],
+          color: 'white',
         }}
       >
-        <Container maxWidth="sm">
-          <Typography variant="body2" color="text.secondary" align="center">
-            Laserfiche Data View v1.0.0
+        <Container maxWidth="lg">
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            justifyContent="space-between"
+            alignItems="center"
+            spacing={2}
+          >
+            <Typography variant="body2" color="grey.400">
+              &copy; {new Date().getFullYear()} LF DataView by{' '}
+              <Link
+                href="https://abevintegrations.com"
+                target="_blank"
+                rel="noopener"
+                color="grey.400"
+                underline="hover"
+              >
+                ABEV Integrations
+              </Link>
+              .
+            </Typography>
+            <Stack direction="row" spacing={3}>
+              <Link
+                href="https://github.com/ABEVIntegrations/lfdataview"
+                target="_blank"
+                rel="noopener"
+                color="grey.400"
+                underline="hover"
+              >
+                GitHub
+              </Link>
+              <Link
+                href="mailto:support@lfdataview.com"
+                color="grey.400"
+                underline="hover"
+              >
+                Support
+              </Link>
+            </Stack>
+          </Stack>
+          <Typography
+            variant="caption"
+            color="grey.600"
+            sx={{ display: 'block', mt: 2, textAlign: 'center' }}
+          >
+            Laserfiche is a registered trademark of Laserfiche. LF DataView is not affiliated with Laserfiche.
           </Typography>
         </Container>
       </Box>

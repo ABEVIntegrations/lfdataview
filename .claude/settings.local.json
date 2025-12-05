@@ -10,7 +10,20 @@
       "Bash(sudo docker ps:*)",
       "Bash(powershell.exe -Command \"docker logs --tail 50 lfdataview-backend\")",
       "WebFetch(domain:developer.laserfiche.com)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git remote set-url:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(dir:*)",
+      "Bash(cat:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(powershell.exe -Command \"docker logs --tail 20 lfdataview-backend\")",
+      "Bash(powershell.exe:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker exec:*)"
     ],
     "deny": [],
     "ask": []

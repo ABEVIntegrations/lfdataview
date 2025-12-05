@@ -23,8 +23,61 @@ export interface RowResponse {
 
 export interface ColumnInfo {
   name: string;
-  type: string;
+  type: string;  // OData types: Edm.String, Edm.Int32, Edm.Int64, Edm.Decimal, Edm.Double, Edm.Boolean, Edm.DateTime, etc.
   required: boolean;
+}
+
+// Validation helper for OData types
+export function validateODataType(value: string, type: string): { valid: boolean; message?: string } {
+  if (value === '' || value === null || value === undefined) {
+    return { valid: true }; // Empty is allowed (validation for required is separate)
+  }
+
+  const lowerType = type.toLowerCase();
+
+  // Integer types
+  if (lowerType.includes('int')) {
+    if (!/^-?\d+$/.test(value)) {
+      return { valid: false, message: 'Must be a whole number' };
+    }
+    const num = parseInt(value, 10);
+    if (lowerType.includes('int16') && (num < -32768 || num > 32767)) {
+      return { valid: false, message: 'Value out of range for Int16' };
+    }
+    if (lowerType.includes('int32') && (num < -2147483648 || num > 2147483647)) {
+      return { valid: false, message: 'Value out of range for Int32' };
+    }
+    return { valid: true };
+  }
+
+  // Decimal/Double types
+  if (lowerType.includes('decimal') || lowerType.includes('double') || lowerType.includes('single')) {
+    if (!/^-?\d*\.?\d+$/.test(value)) {
+      return { valid: false, message: 'Must be a number' };
+    }
+    return { valid: true };
+  }
+
+  // Boolean
+  if (lowerType.includes('boolean')) {
+    if (!['true', 'false', '1', '0', 'yes', 'no'].includes(value.toLowerCase())) {
+      return { valid: false, message: 'Must be true or false' };
+    }
+    return { valid: true };
+  }
+
+  // DateTime
+  if (lowerType.includes('datetime') || lowerType.includes('date')) {
+    // Allow ISO format or common date formats
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      return { valid: false, message: 'Must be a valid date' };
+    }
+    return { valid: true };
+  }
+
+  // String and other types - no validation
+  return { valid: true };
 }
 
 export interface TableSchemaResponse {

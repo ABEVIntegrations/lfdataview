@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -23,9 +23,10 @@ import {
   TextField,
   Snackbar,
   LinearProgress,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Add,
@@ -36,6 +37,8 @@ import {
   Download,
   HelpOutline,
   Upload,
+  Search,
+  Clear,
 } from '@mui/icons-material';
 import {
   fetchTableRows,
@@ -44,9 +47,8 @@ import {
   deleteTableRow,
   fetchTableSchema,
   replaceAllRows,
-  batchCreateRows,
 } from '../services/api';
-import { ReplaceAllResponse, BatchCreateResponse } from '../types';
+import { ReplaceAllResponse, ColumnInfo, validateODataType } from '../types';
 
 export default function TableDetailPage() {
   const { tableName } = useParams<{ tableName: string }>();
@@ -71,9 +73,31 @@ export default function TableDetailPage() {
     severity: 'success',
   });
 
-  // Filter state
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  // Client-side column filters (local filtering only, no API call)
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [helpOpen, setHelpOpen] = useState(false);
+
+  // Server-side search state (triggers API calls)
+  const [serverFilters, setServerFilters] = useState<Record<string, string>>({});
+  const [debouncedServerFilters, setDebouncedServerFilters] = useState<Record<string, string>>({});
+  const [serverFilterMode, setServerFilterMode] = useState<'and' | 'or'>('and');
+
+  // Search bar UI state
+  const [searchColumn, setSearchColumn] = useState<string>('');
+  const [searchValue, setSearchValue] = useState('');
+
+  // Debounce server filter changes (500ms delay) - only for server-side search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedServerFilters(serverFilters);
+      setPage(0); // Reset to first page when server filters change
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [serverFilters]);
+
+  // Form validation state
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [schemaColumns, setSchemaColumns] = useState<ColumnInfo[]>([]);
 
   // CSV upload state
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -83,19 +107,19 @@ export default function TableDetailPage() {
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
-  const [uploadResult, setUploadResult] = useState<ReplaceAllResponse | BatchCreateResponse | null>(null);
+  const [uploadResult, setUploadResult] = useState<ReplaceAllResponse | null>(null);
   const [resultOpen, setResultOpen] = useState(false);
-  const [uploadMode, setUploadMode] = useState<'append' | 'replace'>('append');
 
-  // Fetch table rows
+  // Fetch table rows with server-side filtering (search bar only)
   const {
     data: rowsResponse,
     isLoading,
+    isFetching,
     error,
     refetch,
   } = useQuery({
-    queryKey: ['tableRows', tableName, page, rowsPerPage],
-    queryFn: () => fetchTableRows(tableName!, rowsPerPage, page * rowsPerPage),
+    queryKey: ['tableRows', tableName, page, rowsPerPage, debouncedServerFilters, serverFilterMode],
+    queryFn: () => fetchTableRows(tableName!, rowsPerPage, page * rowsPerPage, debouncedServerFilters, serverFilterMode),
     enabled: !!tableName,
   });
 
@@ -141,45 +165,112 @@ export default function TableDetailPage() {
     },
   });
 
-  // Get columns from first row, with _key always first
-  const rows = rowsResponse?.rows || [];
+  // Get columns from first row, with _key always first (for internal use)
+  const apiRows = rowsResponse?.rows || [];
   const primaryKey = '_key';
-  const columns = rows.length > 0
-    ? [primaryKey, ...Object.keys(rows[0]).filter(col => col !== primaryKey)]
+  const columns = apiRows.length > 0
+    ? [primaryKey, ...Object.keys(apiRows[0]).filter(col => col !== primaryKey)]
     : [];
+  // Display columns exclude _key (internal system field not meaningful to users)
+  const displayColumns = columns.filter(col => col !== primaryKey);
 
-  // Filter rows based on filter values
-  // Supports wildcards: * for any characters
-  // Examples: "2" = exact, "*2*" = contains, "2*" = starts with, "*2" = ends with
-  const filteredRows = rows.filter((row) => {
-    return Object.entries(filters).every(([column, filterValue]) => {
-      if (!filterValue) return true;
-      const cellValue = String(row[column] ?? '').toLowerCase();
-      const filter = filterValue.toLowerCase();
+  // Client-side filtering: filter apiRows based on columnFilters (partial match, case-insensitive)
+  const rows = useMemo(() => {
+    // If no column filters active, return all rows
+    const hasActiveFilters = Object.values(columnFilters).some(v => v && v.trim());
+    if (!hasActiveFilters) {
+      return apiRows;
+    }
 
-      // Check for wildcard patterns
-      if (filter.includes('*')) {
-        // Convert wildcard pattern to regex
-        const regexPattern = filter
-          .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars except *
-          .replace(/\*/g, '.*'); // Convert * to .*
-        const regex = new RegExp(`^${regexPattern}$`);
-        return regex.test(cellValue);
-      }
-
-      // Default: exact match
-      return cellValue === filter;
+    return apiRows.filter(row => {
+      return Object.entries(columnFilters).every(([column, filterValue]) => {
+        if (!filterValue || !filterValue.trim()) return true;
+        const cellValue = String(row[column] ?? '').toLowerCase();
+        return cellValue.includes(filterValue.toLowerCase().trim());
+      });
     });
-  });
+  }, [apiRows, columnFilters]);
 
-  // Handle filter change
-  const handleFilterChange = (column: string, value: string) => {
-    setFilters((prev) => ({ ...prev, [column]: value }));
+  // Fetch schema for validation when table changes
+  useEffect(() => {
+    if (tableName) {
+      fetchTableSchema(tableName)
+        .then((schema) => setSchemaColumns(schema.columns))
+        .catch((err) => console.error('Failed to fetch schema:', err));
+    }
+  }, [tableName]);
+
+  // Get column type from schema
+  const getColumnType = useCallback((columnName: string): string => {
+    const col = schemaColumns.find((c) => c.name === columnName);
+    return col?.type || 'Edm.String';
+  }, [schemaColumns]);
+
+  // Validate a field value against its type
+  const validateField = useCallback((columnName: string, value: string): string | undefined => {
+    const type = getColumnType(columnName);
+    const result = validateODataType(value, type);
+    return result.valid ? undefined : result.message;
+  }, [getColumnType]);
+
+  // Validate all form fields
+  const validateForm = useCallback((): boolean => {
+    const errors: Record<string, string> = {};
+    let isValid = true;
+
+    for (const [column, value] of Object.entries(formData)) {
+      if (column === '_key') continue; // Skip _key
+      const error = validateField(column, value);
+      if (error) {
+        errors[column] = error;
+        isValid = false;
+      }
+    }
+
+    setValidationErrors(errors);
+    return isValid;
+  }, [formData, validateField]);
+
+  // Handle column filter change (client-side only, no API call)
+  const handleColumnFilterChange = (column: string, value: string) => {
+    setColumnFilters((prev) => ({ ...prev, [column]: value }));
+  };
+
+  // Handle search (triggers server-side API call)
+  const handleSearch = () => {
+    if (!searchValue.trim()) return;
+
+    // Clear client-side column filters when doing a new search
+    setColumnFilters({});
+
+    if (searchColumn) {
+      // Search specific column - use AND mode (single filter anyway)
+      setServerFilterMode('and');
+      setServerFilters({ [searchColumn]: searchValue.trim() });
+    } else {
+      // Search all columns - create filter for each column with same value (OR mode)
+      setServerFilterMode('or');
+      const allColumnFilters: Record<string, string> = {};
+      displayColumns.forEach((col) => {
+        allColumnFilters[col] = searchValue.trim();
+      });
+      setServerFilters(allColumnFilters);
+    }
+  };
+
+  // Clear search and all filters (both client-side and server-side)
+  const handleClearSearch = () => {
+    setSearchColumn('');
+    setSearchValue('');
+    setServerFilters({});
+    setServerFilterMode('and');
+    setColumnFilters({});
   };
 
   // Download CSV (excludes _key for Laserfiche compatibility)
+  // Note: Downloads only the current page of filtered results
   const handleDownloadCsv = () => {
-    if (filteredRows.length === 0) return;
+    if (rows.length === 0) return;
 
     // Exclude _key column from download
     const downloadColumns = columns.filter(col => col !== '_key');
@@ -188,7 +279,7 @@ export default function TableDetailPage() {
       // Header row
       downloadColumns.join(','),
       // Data rows
-      ...filteredRows.map((row) =>
+      ...rows.map((row) =>
         downloadColumns
           .map((col) => {
             const value = String(row[col] ?? '');
@@ -222,6 +313,7 @@ export default function TableDetailPage() {
 
   const handleCreate = () => {
     setFormData({});
+    setValidationErrors({});
     setCreateOpen(true);
   };
 
@@ -232,6 +324,7 @@ export default function TableDetailPage() {
       data[key] = String(value ?? '');
     });
     setFormData(data);
+    setValidationErrors({});
     setEditOpen(true);
   };
 
@@ -242,13 +335,28 @@ export default function TableDetailPage() {
 
   const handleFormChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    // Validate field on change and clear error if valid
+    const error = validateField(field, value);
+    setValidationErrors((prev) => {
+      if (error) {
+        return { ...prev, [field]: error };
+      }
+      const { [field]: _, ...rest } = prev;
+      return rest;
+    });
   };
 
   const handleCreateSubmit = () => {
+    if (!validateForm()) {
+      return;
+    }
     createMutation.mutate(formData);
   };
 
   const handleEditSubmit = () => {
+    if (!validateForm()) {
+      return;
+    }
     if (selectedRow) {
       const key = String(selectedRow[primaryKey]);
       updateMutation.mutate({ key, data: formData });
@@ -355,7 +463,7 @@ export default function TableDetailPage() {
     setUploadConfirmOpen(true);
   };
 
-  // Handle upload execution (append or replace)
+  // Handle upload execution (replace all rows)
   const handleUploadConfirm = async () => {
     if (csvData.length === 0) return;
 
@@ -370,34 +478,18 @@ export default function TableDetailPage() {
         return rest;
       });
 
-      if (uploadMode === 'append') {
-        const result = await batchCreateRows(tableName!, rowsToUpload);
-        setUploadResult(result);
-        setUploadOpen(false);
-        setResultOpen(true);
+      const result = await replaceAllRows(tableName!, rowsToUpload);
+      setUploadResult(result);
+      setUploadOpen(false);
+      setResultOpen(true);
 
-        // Refresh table data
-        queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
+      // Refresh table data
+      queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
 
-        if (result.failed === 0) {
-          setSnackbar({ open: true, message: `Successfully added ${result.succeeded} rows`, severity: 'success' });
-        } else {
-          setSnackbar({ open: true, message: `Added ${result.succeeded} rows, ${result.failed} failed`, severity: 'error' });
-        }
+      if (result.success) {
+        setSnackbar({ open: true, message: `Successfully replaced table with ${result.rows_replaced} rows`, severity: 'success' });
       } else {
-        const result = await replaceAllRows(tableName!, rowsToUpload);
-        setUploadResult(result);
-        setUploadOpen(false);
-        setResultOpen(true);
-
-        // Refresh table data
-        queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
-
-        if (result.success) {
-          setSnackbar({ open: true, message: `Successfully replaced table with ${result.rows_replaced} rows`, severity: 'success' });
-        } else {
-          setSnackbar({ open: true, message: result.error || 'Replace operation failed', severity: 'error' });
-        }
+        setSnackbar({ open: true, message: result.error || 'Replace operation failed', severity: 'error' });
       }
     } catch (err) {
       setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Upload failed', severity: 'error' });
@@ -446,7 +538,7 @@ export default function TableDetailPage() {
           <Button startIcon={<Refresh />} onClick={() => refetch()} sx={{ mr: 1 }}>
             Refresh
           </Button>
-          <Button startIcon={<Download />} onClick={handleDownloadCsv} sx={{ mr: 1 }} disabled={filteredRows.length === 0}>
+          <Button startIcon={<Download />} onClick={handleDownloadCsv} sx={{ mr: 1 }} disabled={rows.length === 0}>
             Download CSV
           </Button>
           <Button
@@ -468,12 +560,65 @@ export default function TableDetailPage() {
         </Box>
       </Box>
 
+      {/* Loading indicator for filtering */}
+      {isFetching && !isLoading && <LinearProgress sx={{ mb: 1 }} />}
+
+      {/* Search Bar */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Column</InputLabel>
+            <Select
+              value={searchColumn}
+              label="Column"
+              onChange={(e) => setSearchColumn(e.target.value)}
+            >
+              <MenuItem value="">
+                <em>All Columns</em>
+              </MenuItem>
+              {displayColumns.map((col) => (
+                <MenuItem key={col} value={col}>
+                  {col}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            size="small"
+            placeholder="Search value..."
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            sx={{ minWidth: 250 }}
+          />
+          <Button
+            variant="contained"
+            startIcon={<Search />}
+            onClick={handleSearch}
+            disabled={!searchValue.trim()}
+          >
+            Search
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<Clear />}
+            onClick={handleClearSearch}
+            disabled={Object.keys(serverFilters).length === 0 && Object.keys(columnFilters).every(k => !columnFilters[k]) && !searchValue && !searchColumn}
+          >
+            Clear
+          </Button>
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+          Exact match search (case-insensitive). Use per-column filters below for partial/wildcard matching on displayed rows.
+        </Typography>
+      </Paper>
+
       {/* Table */}
       <TableContainer component={Paper}>
         <Table size="small">
           <TableHead>
             <TableRow>
-              {columns.map((column) => (
+              {displayColumns.map((column) => (
                 <TableCell key={column} sx={{ fontWeight: 'bold' }}>
                   {column}
                 </TableCell>
@@ -481,35 +626,33 @@ export default function TableDetailPage() {
               <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
             </TableRow>
             <TableRow>
-              {columns.map((column) => (
+              {displayColumns.map((column) => (
                 <TableCell key={`filter-${column}`} sx={{ p: 1 }}>
-                  {column !== primaryKey && (
-                    <TextField
-                      size="small"
-                      placeholder={`Use * for wildcard`}
-                      value={filters[column] || ''}
-                      onChange={(e) => handleFilterChange(column, e.target.value)}
-                      fullWidth
-                      variant="outlined"
-                      sx={{ '& .MuiInputBase-input': { py: 0.5, fontSize: '0.875rem' } }}
-                    />
-                  )}
+                  <TextField
+                    size="small"
+                    placeholder="Filter..."
+                    value={columnFilters[column] || ''}
+                    onChange={(e) => handleColumnFilterChange(column, e.target.value)}
+                    fullWidth
+                    variant="outlined"
+                    sx={{ '& .MuiInputBase-input': { py: 0.5, fontSize: '0.875rem' } }}
+                  />
                 </TableCell>
               ))}
               <TableCell />
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredRows.length === 0 ? (
+            {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length + 1} align="center">
-                  {rows.length === 0 ? 'No rows found' : 'No rows match the filter'}
+                <TableCell colSpan={displayColumns.length + 1} align="center">
+                  No rows found
                 </TableCell>
               </TableRow>
             ) : (
-              filteredRows.map((row, index) => (
+              rows.map((row, index) => (
                 <TableRow key={index} hover>
-                  {columns.map((column) => (
+                  {displayColumns.map((column) => (
                     <TableCell key={column}>
                       {String(row[column] ?? '')}
                     </TableCell>
@@ -558,6 +701,8 @@ export default function TableDetailPage() {
               fullWidth
               margin="normal"
               size="small"
+              error={!!validationErrors[column]}
+              helperText={validationErrors[column] || ''}
             />
           ))}
         </DialogContent>
@@ -566,7 +711,7 @@ export default function TableDetailPage() {
           <Button
             onClick={handleCreateSubmit}
             variant="contained"
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || Object.keys(validationErrors).length > 0}
           >
             {createMutation.isPending ? 'Creating...' : 'Create'}
           </Button>
@@ -577,7 +722,7 @@ export default function TableDetailPage() {
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Row</DialogTitle>
         <DialogContent>
-          {columns.map((column) => (
+          {displayColumns.map((column) => (
             <TextField
               key={column}
               label={column}
@@ -586,7 +731,8 @@ export default function TableDetailPage() {
               fullWidth
               margin="normal"
               size="small"
-              disabled={column === primaryKey}
+              error={!!validationErrors[column]}
+              helperText={validationErrors[column] || ''}
             />
           ))}
         </DialogContent>
@@ -595,7 +741,7 @@ export default function TableDetailPage() {
           <Button
             onClick={handleEditSubmit}
             variant="contained"
-            disabled={updateMutation.isPending}
+            disabled={updateMutation.isPending || Object.keys(validationErrors).length > 0}
           >
             {updateMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
@@ -611,7 +757,7 @@ export default function TableDetailPage() {
           </Typography>
           {selectedRow && (
             <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1, maxHeight: 300, overflow: 'auto' }}>
-              {columns.map((column) => (
+              {displayColumns.map((column) => (
                 <Typography key={column} variant="body2" sx={{ mb: 0.5 }}>
                   <strong>{column}:</strong> {String(selectedRow[column] ?? '')}
                 </Typography>
@@ -634,35 +780,30 @@ export default function TableDetailPage() {
 
       {/* Help Dialog */}
       <Dialog open={helpOpen} onClose={() => setHelpOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>How to Use Filters</DialogTitle>
+        <DialogTitle>How to Use Search & Filters</DialogTitle>
         <DialogContent>
           <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 1 }}>
-            Exact Match (Default)
+            Search Bar (Server-Side)
           </Typography>
           <Typography variant="body2" paragraph>
-            Type a value to find exact matches. For example, typing <code>2</code> will only match "2", not "12" or "102".
+            Use the search bar above for exact match searches. This queries Laserfiche directly and is best for finding specific records. Select a column or search all columns at once.
           </Typography>
-
-          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-            Wildcard Matching
-          </Typography>
-          <Typography variant="body2" paragraph>
-            Use <code>*</code> as a wildcard to match any characters:
-          </Typography>
-          <Box component="ul" sx={{ pl: 2, mt: 0 }}>
-            <Typography component="li" variant="body2"><code>*2*</code> — contains "2" (matches "2", "12", "102")</Typography>
-            <Typography component="li" variant="body2"><code>2*</code> — starts with "2" (matches "2", "20", "200")</Typography>
-            <Typography component="li" variant="body2"><code>*2</code> — ends with "2" (matches "2", "12", "102")</Typography>
-            <Typography component="li" variant="body2"><code>test*value</code> — starts with "test" and ends with "value"</Typography>
-          </Box>
 
           <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 2 }}>
-            Additional Notes
+            Column Filters (Client-Side)
+          </Typography>
+          <Typography variant="body2" paragraph>
+            The filter fields below each column header filter the currently displayed rows. These support partial matching - typing <code>smith</code> will match "Smith", "Smithson", "Blacksmith", etc.
+          </Typography>
+
+          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 2 }}>
+            Notes
           </Typography>
           <Box component="ul" sx={{ pl: 2, mt: 0 }}>
-            <Typography component="li" variant="body2">Filters are case-insensitive</Typography>
-            <Typography component="li" variant="body2">Multiple column filters use AND logic</Typography>
-            <Typography component="li" variant="body2">CSV export includes only filtered rows</Typography>
+            <Typography component="li" variant="body2">Both filters are case-insensitive</Typography>
+            <Typography component="li" variant="body2">Column filters use AND logic (all must match)</Typography>
+            <Typography component="li" variant="body2">Column filters only work on currently loaded rows</Typography>
+            <Typography component="li" variant="body2">CSV export includes only the current filtered results</Typography>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -702,25 +843,9 @@ export default function TableDetailPage() {
             <strong>Rows to upload:</strong> {csvData.length}
           </Typography>
 
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>Upload Mode:</Typography>
-            <RadioGroup
-              row
-              value={uploadMode}
-              onChange={(e) => setUploadMode(e.target.value as 'append' | 'replace')}
-            >
-              <FormControlLabel
-                value="append"
-                control={<Radio />}
-                label="Append rows (add to existing data)"
-              />
-              <FormControlLabel
-                value="replace"
-                control={<Radio />}
-                label="Replace all (delete existing & insert new)"
-              />
-            </RadioGroup>
-          </Box>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This will replace ALL existing rows in the table with the uploaded data.
+          </Alert>
 
           {csvData.length > 0 && (
             <Box sx={{ maxHeight: 300, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
@@ -768,58 +893,34 @@ export default function TableDetailPage() {
           <Button
             onClick={handleShowUploadConfirm}
             variant="contained"
-            color={uploadMode === 'replace' ? 'warning' : 'primary'}
+            color="warning"
             disabled={isUploading || uploadErrors.length > 0 || csvData.length === 0}
           >
-            {isUploading
-              ? 'Uploading...'
-              : uploadMode === 'append'
-                ? `Add ${csvData.length} Rows`
-                : `Replace Table with ${csvData.length} Rows`}
+            {isUploading ? 'Uploading...' : `Replace Table with ${csvData.length} Rows`}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Upload Confirmation Dialog */}
       <Dialog open={uploadConfirmOpen} onClose={() => setUploadConfirmOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {uploadMode === 'append' ? 'Confirm Add Rows' : 'Confirm Replace All Rows'}
-        </DialogTitle>
+        <DialogTitle>Confirm Replace All Rows</DialogTitle>
         <DialogContent>
-          {uploadMode === 'replace' ? (
-            <>
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                <Typography variant="body1" fontWeight="bold">
-                  This will DELETE ALL existing rows in the table!
-                </Typography>
-              </Alert>
-              <Typography variant="body2" paragraph>
-                You are about to replace all data in <strong>{tableName}</strong> with {csvData.length} rows from your CSV file.
-              </Typography>
-              <Typography variant="body2" paragraph>
-                This operation:
-              </Typography>
-              <Box component="ul" sx={{ pl: 2, mt: 0 }}>
-                <Typography component="li" variant="body2">Deletes all existing rows in the table</Typography>
-                <Typography component="li" variant="body2">Inserts {csvData.length} new rows from your CSV</Typography>
-                <Typography component="li" variant="body2">Cannot be undone</Typography>
-              </Box>
-            </>
-          ) : (
-            <>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                <Typography variant="body1">
-                  Adding {csvData.length} new rows to the table
-                </Typography>
-              </Alert>
-              <Typography variant="body2" paragraph>
-                You are about to add {csvData.length} new rows to <strong>{tableName}</strong> from your CSV file.
-              </Typography>
-              <Typography variant="body2" paragraph>
-                Existing data will not be modified.
-              </Typography>
-            </>
-          )}
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body1" fontWeight="bold">
+              This will DELETE ALL existing rows in the table!
+            </Typography>
+          </Alert>
+          <Typography variant="body2" paragraph>
+            You are about to replace all data in <strong>{tableName}</strong> with {csvData.length} rows from your CSV file.
+          </Typography>
+          <Typography variant="body2" paragraph>
+            This operation:
+          </Typography>
+          <Box component="ul" sx={{ pl: 2, mt: 0 }}>
+            <Typography component="li" variant="body2">Deletes all existing rows in the table</Typography>
+            <Typography component="li" variant="body2">Inserts {csvData.length} new rows from your CSV</Typography>
+            <Typography component="li" variant="body2">Cannot be undone</Typography>
+          </Box>
           <Typography variant="body2" sx={{ mt: 2 }}>
             Are you sure you want to continue?
           </Typography>
@@ -831,9 +932,9 @@ export default function TableDetailPage() {
           <Button
             onClick={handleUploadConfirm}
             variant="contained"
-            color={uploadMode === 'replace' ? 'error' : 'primary'}
+            color="error"
           >
-            {uploadMode === 'append' ? `Yes, Add ${csvData.length} Rows` : 'Yes, Replace All Rows'}
+            Yes, Replace All Rows
           </Button>
         </DialogActions>
       </Dialog>
@@ -843,45 +944,15 @@ export default function TableDetailPage() {
         <DialogTitle>Upload Results</DialogTitle>
         <DialogContent>
           {uploadResult && (
-            <>
-              {'success' in uploadResult ? (
-                // ReplaceAllResponse
-                uploadResult.success ? (
-                  <Alert severity="success" sx={{ mb: 2 }}>
-                    Successfully replaced table with {uploadResult.rows_replaced} rows
-                  </Alert>
-                ) : (
-                  <Alert severity="error" sx={{ mb: 2 }}>
-                    {uploadResult.error || 'Replace operation failed'}
-                  </Alert>
-                )
-              ) : (
-                // BatchCreateResponse
-                <>
-                  {uploadResult.failed === 0 ? (
-                    <Alert severity="success" sx={{ mb: 2 }}>
-                      Successfully added {uploadResult.succeeded} rows
-                    </Alert>
-                  ) : (
-                    <Alert severity="warning" sx={{ mb: 2 }}>
-                      Added {uploadResult.succeeded} of {uploadResult.total} rows ({uploadResult.failed} failed)
-                    </Alert>
-                  )}
-                  {uploadResult.failed > 0 && uploadResult.results && (
-                    <Box sx={{ mt: 2, maxHeight: 200, overflow: 'auto' }}>
-                      <Typography variant="subtitle2" gutterBottom>Failed rows:</Typography>
-                      {uploadResult.results
-                        .filter(r => !r.success)
-                        .map((r, idx) => (
-                          <Typography key={idx} variant="body2" color="error">
-                            Row {r.index + 1}: {r.error}
-                          </Typography>
-                        ))}
-                    </Box>
-                  )}
-                </>
-              )}
-            </>
+            uploadResult.success ? (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                Successfully replaced table with {uploadResult.rows_replaced} rows
+              </Alert>
+            ) : (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {uploadResult.error || 'Replace operation failed'}
+              </Alert>
+            )
           )}
         </DialogContent>
         <DialogActions>
