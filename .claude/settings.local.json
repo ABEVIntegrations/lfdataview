@@ -23,7 +23,8 @@
       "Bash(powershell.exe:*)",
       "Bash(docker-compose build:*)",
       "Bash(docker-compose ps:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(git fetch:*)"
     ],
     "deny": [],
     "ask": []
