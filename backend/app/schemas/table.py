@@ -162,3 +162,10 @@ class ReplaceAllResponse(BaseModel):
     success: bool = Field(..., description="Whether the operation succeeded")
     rows_replaced: int = Field(..., description="Number of rows in the new table")
     error: Optional[str] = Field(None, description="Error message if failed")
+
+
+class TableCountResponse(BaseModel):
+    """Response for getting table row count."""
+
+    table_name: str = Field(..., description="Name of the table")
+    row_count: int = Field(..., description="Number of rows in the table")

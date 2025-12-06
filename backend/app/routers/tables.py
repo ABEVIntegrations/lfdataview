@@ -22,6 +22,7 @@ from app.schemas.table import (
     RowResult,
     ReplaceAllRequest,
     ReplaceAllResponse,
+    TableCountResponse,
 )
 from app.utils.laserfiche import laserfiche_client
 
@@ -268,6 +269,42 @@ async def get_table_schema(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get table schema: {str(e)}",
+        )
+
+
+@router.get(
+    "/{table_name}/count",
+    response_model=TableCountResponse,
+    summary="Get table row count",
+    description="Get the number of rows in a table",
+)
+async def get_table_row_count(
+    table_name: str,
+    access_token: str = Depends(get_user_access_token),
+) -> TableCountResponse:
+    """Get the row count for a table.
+
+    Args:
+        table_name: Name of the table
+        access_token: User's access token (from dependency)
+
+    Returns:
+        Table name and row count
+    """
+    try:
+        row_count = await laserfiche_client.get_table_row_count(
+            access_token=access_token,
+            table_name=table_name,
+        )
+
+        return TableCountResponse(table_name=table_name, row_count=row_count)
+
+    except httpx.HTTPStatusError as e:
+        handle_laserfiche_error(e)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get table row count: {str(e)}",
         )
 
 

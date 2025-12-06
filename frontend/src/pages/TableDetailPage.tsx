@@ -48,7 +48,7 @@ import {
   fetchTableSchema,
   replaceAllRows,
 } from '../services/api';
-import { ReplaceAllResponse, ColumnInfo, validateODataType } from '../types';
+import { ReplaceAllResponse, ColumnInfo, validateODataType, getDisplayType } from '../types';
 
 export default function TableDetailPage() {
   const { tableName } = useParams<{ tableName: string }>();
@@ -527,9 +527,16 @@ export default function TableDetailPage() {
           <IconButton onClick={() => navigate('/')} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
-          <Typography variant="h4" component="h1">
-            {tableName}
-          </Typography>
+          <Box>
+            <Typography variant="h4" component="h1">
+              {tableName}
+            </Typography>
+            {rowsResponse?.total !== undefined && rowsResponse.total >= 0 && (
+              <Typography variant="body2" color="text.secondary">
+                {rowsResponse.total.toLocaleString()} total rows
+              </Typography>
+            )}
+          </Box>
           <IconButton onClick={() => setHelpOpen(true)} sx={{ ml: 1 }} size="small" color="primary">
             <HelpOutline />
           </IconButton>
@@ -692,19 +699,23 @@ export default function TableDetailPage() {
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add New Row</DialogTitle>
         <DialogContent>
-          {columns.filter(col => col !== primaryKey).map((column) => (
-            <TextField
-              key={column}
-              label={column}
-              value={formData[column] || ''}
-              onChange={(e) => handleFormChange(column, e.target.value)}
-              fullWidth
-              margin="normal"
-              size="small"
-              error={!!validationErrors[column]}
-              helperText={validationErrors[column] || ''}
-            />
-          ))}
+          {columns.filter(col => col !== primaryKey).map((column) => {
+            const colType = getColumnType(column);
+            const displayType = getDisplayType(colType);
+            return (
+              <TextField
+                key={column}
+                label={`${column} (${displayType})`}
+                value={formData[column] || ''}
+                onChange={(e) => handleFormChange(column, e.target.value)}
+                fullWidth
+                margin="normal"
+                size="small"
+                error={!!validationErrors[column]}
+                helperText={validationErrors[column] || ''}
+              />
+            );
+          })}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
@@ -722,19 +733,23 @@ export default function TableDetailPage() {
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Row</DialogTitle>
         <DialogContent>
-          {displayColumns.map((column) => (
-            <TextField
-              key={column}
-              label={column}
-              value={formData[column] || ''}
-              onChange={(e) => handleFormChange(column, e.target.value)}
-              fullWidth
-              margin="normal"
-              size="small"
-              error={!!validationErrors[column]}
-              helperText={validationErrors[column] || ''}
-            />
-          ))}
+          {displayColumns.map((column) => {
+            const colType = getColumnType(column);
+            const displayType = getDisplayType(colType);
+            return (
+              <TextField
+                key={column}
+                label={`${column} (${displayType})`}
+                value={formData[column] || ''}
+                onChange={(e) => handleFormChange(column, e.target.value)}
+                fullWidth
+                margin="normal"
+                size="small"
+                error={!!validationErrors[column]}
+                helperText={validationErrors[column] || ''}
+              />
+            );
+          })}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditOpen(false)}>Cancel</Button>

@@ -105,6 +105,36 @@ export interface ReplaceAllResponse {
   error?: string;
 }
 
+export interface TableCountResponse {
+  table_name: string;
+  row_count: number;
+}
+
+/**
+ * Convert OData type to user-friendly display name
+ */
+export function getDisplayType(odataType: string): string {
+  const lowerType = odataType.toLowerCase();
+
+  if (lowerType.includes('int')) {
+    return 'Integer';
+  }
+  if (lowerType.includes('decimal') || lowerType.includes('double') || lowerType.includes('single')) {
+    return 'Decimal';
+  }
+  if (lowerType.includes('boolean')) {
+    return 'Yes/No';
+  }
+  if (lowerType.includes('datetime')) {
+    return 'Date/Time';
+  }
+  if (lowerType.includes('date')) {
+    return 'Date';
+  }
+  // Default to Text for Edm.String and anything else
+  return 'Text';
+}
+
 export interface AuthStatus {
   authenticated: boolean;
   user?: {
