@@ -152,6 +152,39 @@ class LaserficheClient:
 
     # ========== Table API Methods ==========
 
+    async def get_table_row_count(self, access_token: str, table_name: str) -> int:
+        """Get the row count for a table using OData aggregate.
+
+        Args:
+            access_token: Valid access token with project scope
+            table_name: Name of the table
+
+        Returns:
+            Number of rows in the table
+
+        Raises:
+            httpx.HTTPError: If request fails
+        """
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
+
+        params = {
+            "$apply": "aggregate($count as rowCount)",
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.API_BASE}/table/{table_name}",
+                headers=headers,
+                params=params,
+            )
+            response.raise_for_status()
+            data = response.json()
+            # Response format: { "rowCount": 123 }
+            return data.get("rowCount", 0)
+
     async def list_tables(self, access_token: str) -> List[Dict]:
         """List all accessible tables using OData Table API.
 

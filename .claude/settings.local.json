@@ -24,7 +24,8 @@
       "Bash(docker-compose build:*)",
       "Bash(docker-compose ps:*)",
       "Bash(docker exec:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

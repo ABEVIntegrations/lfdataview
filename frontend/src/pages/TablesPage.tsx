@@ -9,13 +9,57 @@ import {
   Grid,
   Typography,
   Alert,
+  Skeleton,
 } from '@mui/material';
 import { TableChart, Refresh } from '@mui/icons-material';
-import { fetchTables } from '../services/api';
+import { fetchTables, fetchTableRowCount } from '../services/api';
+import { TableInfo } from '../types';
 
-export default function TablesPage() {
+// Separate component for each table card to enable lazy row count loading
+function TableCard({ table }: { table: TableInfo }) {
   const navigate = useNavigate();
 
+  // Fetch row count lazily for this specific table
+  const { data: countResponse, isLoading: countLoading } = useQuery({
+    queryKey: ['tableRowCount', table.name],
+    queryFn: () => fetchTableRowCount(table.name),
+    staleTime: 60000, // Cache for 1 minute
+  });
+
+  return (
+    <Card>
+      <CardActionArea onClick={() => navigate(`/tables/${table.name}`)}>
+        <CardContent>
+          <Box display="flex" alignItems="center" mb={1}>
+            <TableChart color="primary" sx={{ mr: 1 }} />
+            <Typography variant="h6" component="h2">
+              {table.displayName || table.name}
+            </Typography>
+          </Box>
+          {table.description && (
+            <Typography variant="body2" color="text.secondary">
+              {table.description}
+            </Typography>
+          )}
+          <Box display="flex" justifyContent="space-between" alignItems="center" mt={1}>
+            <Typography variant="caption" color="text.secondary">
+              {table.name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {countLoading ? (
+                <Skeleton width={50} />
+              ) : (
+                `${countResponse?.row_count ?? '?'} rows`
+              )}
+            </Typography>
+          </Box>
+        </CardContent>
+      </CardActionArea>
+    </Card>
+  );
+}
+
+export default function TablesPage() {
   const {
     data: tablesResponse,
     isLoading,
@@ -83,26 +127,7 @@ export default function TablesPage() {
       <Grid container spacing={3}>
         {tables.map((table) => (
           <Grid item xs={12} sm={6} md={4} key={table.name}>
-            <Card>
-              <CardActionArea onClick={() => navigate(`/tables/${table.name}`)}>
-                <CardContent>
-                  <Box display="flex" alignItems="center" mb={1}>
-                    <TableChart color="primary" sx={{ mr: 1 }} />
-                    <Typography variant="h6" component="h2">
-                      {table.displayName || table.name}
-                    </Typography>
-                  </Box>
-                  {table.description && (
-                    <Typography variant="body2" color="text.secondary">
-                      {table.description}
-                    </Typography>
-                  )}
-                  <Typography variant="caption" color="text.secondary">
-                    {table.name}
-                  </Typography>
-                </CardContent>
-              </CardActionArea>
-            </Card>
+            <TableCard table={table} />
           </Grid>
         ))}
       </Grid>

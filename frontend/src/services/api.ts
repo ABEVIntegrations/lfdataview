@@ -7,6 +7,7 @@ import {
   TableSchemaResponse,
   BatchCreateResponse,
   ReplaceAllResponse,
+  TableCountResponse,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
@@ -121,6 +122,12 @@ export async function fetchTableSchema(
   tableName: string
 ): Promise<TableSchemaResponse> {
   return fetchWithCredentials(`${API_BASE}/tables/${tableName}/schema`);
+}
+
+export async function fetchTableRowCount(
+  tableName: string
+): Promise<TableCountResponse> {
+  return fetchWithCredentials(`${API_BASE}/tables/${tableName}/count`);
 }
 
 export async function batchCreateRows(
