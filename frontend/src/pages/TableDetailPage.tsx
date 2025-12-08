@@ -47,8 +47,9 @@ import {
   deleteTableRow,
   fetchTableSchema,
   replaceAllRows,
+  fetchTableRowCount,
 } from '../services/api';
-import { ReplaceAllResponse, ColumnInfo, validateODataType, getDisplayType } from '../types';
+import { ReplaceAllResponse, ColumnInfo, validateODataType, getDisplayType, convertValueForApi } from '../types';
 
 export default function TableDetailPage() {
   const { tableName } = useParams<{ tableName: string }>();
@@ -123,11 +124,20 @@ export default function TableDetailPage() {
     enabled: !!tableName,
   });
 
+  // Fetch total row count for the table (separate from paginated rows)
+  const { data: countResponse } = useQuery({
+    queryKey: ['tableRowCount', tableName],
+    queryFn: () => fetchTableRowCount(tableName!),
+    enabled: !!tableName,
+    staleTime: 30000, // Cache for 30 seconds
+  });
+
   // Mutations
   const createMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => createTableRow(tableName!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
+      queryClient.invalidateQueries({ queryKey: ['tableRowCount', tableName] });
       setCreateOpen(false);
       setFormData({});
       setSnackbar({ open: true, message: 'Row created successfully', severity: 'success' });
@@ -156,6 +166,7 @@ export default function TableDetailPage() {
     mutationFn: (key: string) => deleteTableRow(tableName!, key),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
+      queryClient.invalidateQueries({ queryKey: ['tableRowCount', tableName] });
       setDeleteOpen(false);
       setSelectedRow(null);
       setSnackbar({ open: true, message: 'Row deleted successfully', severity: 'success' });
@@ -346,11 +357,23 @@ export default function TableDetailPage() {
     });
   };
 
+  // Convert form data (strings) to proper types for API submission
+  const convertFormDataForApi = useCallback((data: Record<string, string>): Record<string, unknown> => {
+    const converted: Record<string, unknown> = {};
+    for (const [column, value] of Object.entries(data)) {
+      if (column === '_key') continue; // Skip _key
+      const colType = getColumnType(column);
+      converted[column] = convertValueForApi(value, colType);
+    }
+    return converted;
+  }, [getColumnType]);
+
   const handleCreateSubmit = () => {
     if (!validateForm()) {
       return;
     }
-    createMutation.mutate(formData);
+    const convertedData = convertFormDataForApi(formData);
+    createMutation.mutate(convertedData);
   };
 
   const handleEditSubmit = () => {
@@ -359,7 +382,8 @@ export default function TableDetailPage() {
     }
     if (selectedRow) {
       const key = String(selectedRow[primaryKey]);
-      updateMutation.mutate({ key, data: formData });
+      const convertedData = convertFormDataForApi(formData);
+      updateMutation.mutate({ key, data: convertedData });
     }
   };
 
@@ -483,8 +507,9 @@ export default function TableDetailPage() {
       setUploadOpen(false);
       setResultOpen(true);
 
-      // Refresh table data
+      // Refresh table data and row count
       queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
+      queryClient.invalidateQueries({ queryKey: ['tableRowCount', tableName] });
 
       if (result.success) {
         setSnackbar({ open: true, message: `Successfully replaced table with ${result.rows_replaced} rows`, severity: 'success' });
@@ -531,9 +556,9 @@ export default function TableDetailPage() {
             <Typography variant="h4" component="h1">
               {tableName}
             </Typography>
-            {rowsResponse?.total !== undefined && rowsResponse.total >= 0 && (
+            {countResponse?.row_count !== undefined && (
               <Typography variant="body2" color="text.secondary">
-                {rowsResponse.total.toLocaleString()} total rows
+                {countResponse.row_count.toLocaleString()} total rows
               </Typography>
             )}
           </Box>

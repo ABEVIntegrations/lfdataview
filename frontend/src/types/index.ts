@@ -135,6 +135,42 @@ export function getDisplayType(odataType: string): string {
   return 'Text';
 }
 
+/**
+ * Convert a string value to the appropriate JavaScript type based on OData type.
+ * This is needed because Laserfiche API requires proper types (numbers, not strings).
+ */
+export function convertValueForApi(value: string, odataType: string): string | number | boolean | null {
+  // Handle empty values
+  if (value === '' || value === null || value === undefined) {
+    return null;
+  }
+
+  const lowerType = odataType.toLowerCase();
+
+  // Integer types - convert to number
+  if (lowerType.includes('int')) {
+    const num = parseInt(value, 10);
+    return isNaN(num) ? value : num;
+  }
+
+  // Decimal/Double types - convert to number
+  if (lowerType.includes('decimal') || lowerType.includes('double') || lowerType.includes('single')) {
+    const num = parseFloat(value);
+    return isNaN(num) ? value : num;
+  }
+
+  // Boolean types
+  if (lowerType.includes('boolean')) {
+    const lower = value.toLowerCase();
+    if (['true', '1', 'yes'].includes(lower)) return true;
+    if (['false', '0', 'no'].includes(lower)) return false;
+    return value;
+  }
+
+  // String and other types - return as-is
+  return value;
+}
+
 export interface AuthStatus {
   authenticated: boolean;
   user?: {

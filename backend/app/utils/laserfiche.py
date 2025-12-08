@@ -182,8 +182,11 @@ class LaserficheClient:
             )
             response.raise_for_status()
             data = response.json()
-            # Response format: { "rowCount": 123 }
-            return data.get("rowCount", 0)
+            # Response format: { "value": [{ "rowCount": 123 }] }
+            value = data.get("value", [])
+            if value and len(value) > 0:
+                return value[0].get("rowCount", 0)
+            return 0
 
     async def list_tables(self, access_token: str) -> List[Dict]:
         """List all accessible tables using OData Table API.
