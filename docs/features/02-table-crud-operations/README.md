@@ -1,47 +1,47 @@
-# Feature 02: Table CRUD Operations
+# Feature 02: Table Read Operations (Community Edition)
 
 **Phase:** 1 - MVP
 **Priority:** Critical
-**Status:** 📋 Planned
+**Status:** Complete
+**Edition:** Community Edition (Read-Only)
 
 ## Overview
 
-This feature wraps the Laserfiche OData Table API to provide CRUD (Create, Read, Update, Delete) operations on lookup table data. The FastAPI backend acts as a proxy between the React frontend and Laserfiche, adding authentication, error handling, and data transformation.
+This feature wraps the Laserfiche OData Table API to provide read operations on lookup table data. The FastAPI backend acts as a proxy between the React frontend and Laserfiche, adding authentication, error handling, and data transformation.
+
+**Note:** The Community Edition is read-only. For write operations (Create, Update, Delete), see LFDataView Managed.
 
 ## OData Table API Operations
 
 ### Base URL
 `https://api.laserfiche.com/odata4`
 
-### Supported Operations
+### Supported Operations (Community Edition)
 
 | Operation | HTTP Method | Laserfiche Endpoint | Required Scope |
 |-----------|-------------|---------------------|----------------|
 | List Tables | GET | `/table` | `table.Read` |
 | Read Rows | GET | `/table/{tableName}` | `table.Read` |
 | Read Single Row | GET | `/table/{tableName}('{key}')` | `table.Read` |
-| Create Row | POST | `/table/{tableName}` | `table.Write` |
-| Update Row | PATCH | `/table/{tableName}('{key}')` | `table.Write` |
-| Delete Row | DELETE | `/table/{tableName}('{key}')` | `table.Write` |
+| Get Row Count | GET | `/table/{tableName}?$apply=aggregate($count as rowCount)` | `table.Read` |
+| Get Schema | GET | `/table/$metadata` | `table.Read` |
 
 ### Our API Endpoints (FastAPI)
 
 | Operation | HTTP Method | Our Endpoint | Description |
 |-----------|-------------|--------------|-------------|
 | List Tables | GET | `/tables` | List all accessible tables |
-| Read Rows | GET | `/tables/{tableName}` | Get rows from table (paginated) |
+| Read Rows | GET | `/tables/{tableName}` | Get rows from table (paginated, filtered) |
 | Read Single Row | GET | `/tables/{tableName}/{key}` | Get single row by key |
-| Create Row | POST | `/tables/{tableName}` | Create new row |
-| Update Row | PATCH | `/tables/{tableName}/{key}` | Update existing row |
-| Upsert Row | PUT | `/tables/{tableName}/{key}` | Create or update row |
-| Delete Row | DELETE | `/tables/{tableName}/{key}` | Delete row by key |
+| Get Row Count | GET | `/tables/{tableName}/count` | Get total row count |
+| Get Schema | GET | `/tables/{tableName}/schema` | Get table column definitions |
 
 ## Request/Response Examples
 
 ### List Tables
 ```http
 GET /tables
-Authorization: Cookie session_token={TOKEN}
+Authorization: Cookie lf_token={ENCRYPTED_TOKEN}
 
 Response 200:
 {
@@ -55,13 +55,13 @@ Response 200:
 ### Read Table Rows
 ```http
 GET /tables/Customers?limit=50&offset=0
-Authorization: Cookie session_token={TOKEN}
+Authorization: Cookie lf_token={ENCRYPTED_TOKEN}
 
 Response 200:
 {
   "rows": [
-    {"CustomerID": "001", "Name": "Acme Corp", "Email": "contact@acme.com"},
-    {"CustomerID": "002", "Name": "Initech", "Email": "info@initech.com"}
+    {"_key": "1", "CustomerID": "001", "Name": "Acme Corp", "Email": "contact@acme.com"},
+    {"_key": "2", "CustomerID": "002", "Name": "Initech", "Email": "info@initech.com"}
   ],
   "total": 127,
   "limit": 50,
@@ -69,63 +69,59 @@ Response 200:
 }
 ```
 
-### Create Row
+### Read Rows with Filtering
 ```http
-POST /tables/Customers
-Content-Type: application/json
-Authorization: Cookie session_token={TOKEN}
-
-Body:
-{
-  "CustomerID": "003",
-  "Name": "Umbrella Corp",
-  "Email": "contact@umbrella.com"
-}
-
-Response 201:
-{
-  "CustomerID": "003",
-  "Name": "Umbrella Corp",
-  "Email": "contact@umbrella.com"
-}
-```
-
-### Update Row
-```http
-PATCH /tables/Customers/003
-Content-Type: application/json
-Authorization: Cookie session_token={TOKEN}
-
-Body:
-{
-  "Email": "new-email@umbrella.com"
-}
+GET /tables/Customers?filters={"Name":"Acme"}&filter_mode=and
+Authorization: Cookie lf_token={ENCRYPTED_TOKEN}
 
 Response 200:
 {
-  "CustomerID": "003",
-  "Name": "Umbrella Corp",
-  "Email": "new-email@umbrella.com"
+  "rows": [
+    {"_key": "1", "CustomerID": "001", "Name": "Acme Corp", "Email": "contact@acme.com"}
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
 }
 ```
 
-### Delete Row
+### Get Row Count
 ```http
-DELETE /tables/Customers/003
-Authorization: Cookie session_token={TOKEN}
+GET /tables/Customers/count
+Authorization: Cookie lf_token={ENCRYPTED_TOKEN}
 
-Response 204 No Content
+Response 200:
+{
+  "table_name": "Customers",
+  "row_count": 127
+}
+```
+
+### Get Table Schema
+```http
+GET /tables/Customers/schema
+Authorization: Cookie lf_token={ENCRYPTED_TOKEN}
+
+Response 200:
+{
+  "table_name": "Customers",
+  "columns": [
+    {"name": "_key", "type": "Edm.String", "required": true},
+    {"name": "CustomerID", "type": "Edm.String", "required": false},
+    {"name": "Name", "type": "Edm.String", "required": false},
+    {"name": "Email", "type": "Edm.String", "required": false}
+  ]
+}
 ```
 
 ## Error Handling
 
 | Status Code | Meaning | Response |
 |-------------|---------|----------|
-| 400 | Bad Request | Invalid input data, validation failed |
+| 400 | Bad Request | Invalid query parameters |
 | 401 | Unauthorized | Not authenticated, session expired |
-| 403 | Forbidden | Insufficient permissions (missing table.Write scope) |
+| 403 | Forbidden | Insufficient permissions |
 | 404 | Not Found | Table or row doesn't exist |
-| 409 | Conflict | Duplicate key on create |
 | 500 | Internal Server Error | Unexpected error, check logs |
 
 ## Pagination
@@ -140,12 +136,16 @@ Query Parameters:
 - offset: Number of rows to skip (default: 0)
 ```
 
-## Filtering & Sorting (Future Enhancement)
+## Filtering
 
-Phase 2 will add OData query parameters:
+Server-side filtering is supported with exact match:
 
 ```http
-GET /tables/Customers?$filter=Name eq 'Acme'&$orderby=CustomerID desc
+GET /tables/Customers?filters={"Status":"Active"}&filter_mode=and
+
+Query Parameters:
+- filters: JSON-encoded filter object
+- filter_mode: "and" (all must match) or "or" (any must match)
 ```
 
 ## Related Documentation

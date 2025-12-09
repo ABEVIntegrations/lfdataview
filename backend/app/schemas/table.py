@@ -27,53 +27,10 @@ class TableRowsResponse(BaseModel):
     offset: int = Field(..., description="Number of rows skipped", ge=0)
 
 
-class CreateRowRequest(BaseModel):
-    """Request body for creating a table row."""
-
-    data: Dict[str, Any] = Field(..., description="Row data as key-value pairs")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "data": {
-                    "CustomerID": "001",
-                    "Name": "Acme Corp",
-                    "Email": "contact@acme.com",
-                }
-            }
-        }
-
-
-class UpdateRowRequest(BaseModel):
-    """Request body for updating a table row."""
-
-    data: Dict[str, Any] = Field(..., description="Partial row data to update")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "data": {
-                    "Email": "new-email@acme.com",
-                }
-            }
-        }
-
-
 class RowResponse(BaseModel):
-    """Response for single row operations (create, update, get)."""
+    """Response for single row operations (get)."""
 
     data: Dict[str, Any] = Field(..., description="Row data")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "data": {
-                    "CustomerID": "001",
-                    "Name": "Acme Corp",
-                    "Email": "contact@acme.com",
-                }
-            }
-        }
 
 
 class ErrorResponse(BaseModel):
@@ -104,64 +61,6 @@ class TableSchemaResponse(BaseModel):
 
     table_name: str = Field(..., description="Name of the table")
     columns: List[ColumnInfo] = Field(..., description="List of column definitions")
-
-
-class BatchCreateRequest(BaseModel):
-    """Request body for batch creating table rows."""
-
-    rows: List[Dict[str, Any]] = Field(..., description="List of row data to create")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "rows": [
-                    {"Name": "Item 1", "Value": 100},
-                    {"Name": "Item 2", "Value": 200},
-                ]
-            }
-        }
-
-
-class RowResult(BaseModel):
-    """Result of a single row operation in batch."""
-
-    index: int = Field(..., description="Index of the row in the request")
-    success: bool = Field(..., description="Whether the operation succeeded")
-    data: Optional[Dict[str, Any]] = Field(None, description="Created row data if successful")
-    error: Optional[str] = Field(None, description="Error message if failed")
-
-
-class BatchCreateResponse(BaseModel):
-    """Response for batch create operations."""
-
-    total: int = Field(..., description="Total number of rows in request")
-    succeeded: int = Field(..., description="Number of rows successfully created")
-    failed: int = Field(..., description="Number of rows that failed")
-    results: List[RowResult] = Field(..., description="Individual results for each row")
-
-
-class ReplaceAllRequest(BaseModel):
-    """Request body for replacing all table rows."""
-
-    rows: List[Dict[str, Any]] = Field(..., description="List of row data to replace table with")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "rows": [
-                    {"Name": "Item 1", "Value": 100},
-                    {"Name": "Item 2", "Value": 200},
-                ]
-            }
-        }
-
-
-class ReplaceAllResponse(BaseModel):
-    """Response for replace all operation."""
-
-    success: bool = Field(..., description="Whether the operation succeeded")
-    rows_replaced: int = Field(..., description="Number of rows in the new table")
-    error: Optional[str] = Field(None, description="Error message if failed")
 
 
 class TableCountResponse(BaseModel):

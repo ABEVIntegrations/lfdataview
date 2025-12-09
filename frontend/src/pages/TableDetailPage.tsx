@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Box,
   Button,
@@ -21,7 +21,6 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Snackbar,
   LinearProgress,
   FormControl,
   InputLabel,
@@ -29,50 +28,25 @@ import {
   MenuItem,
 } from '@mui/material';
 import {
-  Add,
-  Edit,
-  Delete,
   Refresh,
   ArrowBack,
   Download,
   HelpOutline,
-  Upload,
   Search,
   Clear,
 } from '@mui/icons-material';
 import {
   fetchTableRows,
-  createTableRow,
-  updateTableRow,
-  deleteTableRow,
-  fetchTableSchema,
-  replaceAllRows,
   fetchTableRowCount,
 } from '../services/api';
-import { ReplaceAllResponse, ColumnInfo, validateODataType, getDisplayType, convertValueForApi } from '../types';
 
 export default function TableDetailPage() {
   const { tableName } = useParams<{ tableName: string }>();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   // Pagination state
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
-
-  // Modal state
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
-  const [formData, setFormData] = useState<Record<string, string>>({});
-
-  // Snackbar state
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-    open: false,
-    message: '',
-    severity: 'success',
-  });
 
   // Client-side column filters (local filtering only, no API call)
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
@@ -96,21 +70,6 @@ export default function TableDetailPage() {
     return () => clearTimeout(timer);
   }, [serverFilters]);
 
-  // Form validation state
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const [schemaColumns, setSchemaColumns] = useState<ColumnInfo[]>([]);
-
-  // CSV upload state
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [csvData, setCsvData] = useState<Record<string, string>[]>([]);
-  const [csvColumns, setCsvColumns] = useState<string[]>([]);
-  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
-  const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
-  const [uploadResult, setUploadResult] = useState<ReplaceAllResponse | null>(null);
-  const [resultOpen, setResultOpen] = useState(false);
-
   // Fetch table rows with server-side filtering (search bar only)
   const {
     data: rowsResponse,
@@ -130,50 +89,6 @@ export default function TableDetailPage() {
     queryFn: () => fetchTableRowCount(tableName!),
     enabled: !!tableName,
     staleTime: 30000, // Cache for 30 seconds
-  });
-
-  // Mutations
-  const createMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => createTableRow(tableName!, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
-      queryClient.invalidateQueries({ queryKey: ['tableRowCount', tableName] });
-      setCreateOpen(false);
-      setFormData({});
-      setSnackbar({ open: true, message: 'Row created successfully', severity: 'success' });
-    },
-    onError: (err) => {
-      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Failed to create row', severity: 'error' });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ key, data }: { key: string; data: Record<string, unknown> }) =>
-      updateTableRow(tableName!, key, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
-      setEditOpen(false);
-      setSelectedRow(null);
-      setFormData({});
-      setSnackbar({ open: true, message: 'Row updated successfully', severity: 'success' });
-    },
-    onError: (err) => {
-      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Failed to update row', severity: 'error' });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (key: string) => deleteTableRow(tableName!, key),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
-      queryClient.invalidateQueries({ queryKey: ['tableRowCount', tableName] });
-      setDeleteOpen(false);
-      setSelectedRow(null);
-      setSnackbar({ open: true, message: 'Row deleted successfully', severity: 'success' });
-    },
-    onError: (err) => {
-      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Failed to delete row', severity: 'error' });
-    },
   });
 
   // Get columns from first row, with _key always first (for internal use)
@@ -201,46 +116,6 @@ export default function TableDetailPage() {
       });
     });
   }, [apiRows, columnFilters]);
-
-  // Fetch schema for validation when table changes
-  useEffect(() => {
-    if (tableName) {
-      fetchTableSchema(tableName)
-        .then((schema) => setSchemaColumns(schema.columns))
-        .catch((err) => console.error('Failed to fetch schema:', err));
-    }
-  }, [tableName]);
-
-  // Get column type from schema
-  const getColumnType = useCallback((columnName: string): string => {
-    const col = schemaColumns.find((c) => c.name === columnName);
-    return col?.type || 'Edm.String';
-  }, [schemaColumns]);
-
-  // Validate a field value against its type
-  const validateField = useCallback((columnName: string, value: string): string | undefined => {
-    const type = getColumnType(columnName);
-    const result = validateODataType(value, type);
-    return result.valid ? undefined : result.message;
-  }, [getColumnType]);
-
-  // Validate all form fields
-  const validateForm = useCallback((): boolean => {
-    const errors: Record<string, string> = {};
-    let isValid = true;
-
-    for (const [column, value] of Object.entries(formData)) {
-      if (column === '_key') continue; // Skip _key
-      const error = validateField(column, value);
-      if (error) {
-        errors[column] = error;
-        isValid = false;
-      }
-    }
-
-    setValidationErrors(errors);
-    return isValid;
-  }, [formData, validateField]);
 
   // Handle column filter change (client-side only, no API call)
   const handleColumnFilterChange = (column: string, value: string) => {
@@ -322,207 +197,6 @@ export default function TableDetailPage() {
     setPage(0);
   };
 
-  const handleCreate = () => {
-    setFormData({});
-    setValidationErrors({});
-    setCreateOpen(true);
-  };
-
-  const handleEdit = (row: Record<string, unknown>) => {
-    setSelectedRow(row);
-    const data: Record<string, string> = {};
-    Object.entries(row).forEach(([key, value]) => {
-      data[key] = String(value ?? '');
-    });
-    setFormData(data);
-    setValidationErrors({});
-    setEditOpen(true);
-  };
-
-  const handleDelete = (row: Record<string, unknown>) => {
-    setSelectedRow(row);
-    setDeleteOpen(true);
-  };
-
-  const handleFormChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    // Validate field on change and clear error if valid
-    const error = validateField(field, value);
-    setValidationErrors((prev) => {
-      if (error) {
-        return { ...prev, [field]: error };
-      }
-      const { [field]: _, ...rest } = prev;
-      return rest;
-    });
-  };
-
-  // Convert form data (strings) to proper types for API submission
-  const convertFormDataForApi = useCallback((data: Record<string, string>): Record<string, unknown> => {
-    const converted: Record<string, unknown> = {};
-    for (const [column, value] of Object.entries(data)) {
-      if (column === '_key') continue; // Skip _key
-      const colType = getColumnType(column);
-      converted[column] = convertValueForApi(value, colType);
-    }
-    return converted;
-  }, [getColumnType]);
-
-  const handleCreateSubmit = () => {
-    if (!validateForm()) {
-      return;
-    }
-    const convertedData = convertFormDataForApi(formData);
-    createMutation.mutate(convertedData);
-  };
-
-  const handleEditSubmit = () => {
-    if (!validateForm()) {
-      return;
-    }
-    if (selectedRow) {
-      const key = String(selectedRow[primaryKey]);
-      const convertedData = convertFormDataForApi(formData);
-      updateMutation.mutate({ key, data: convertedData });
-    }
-  };
-
-  const handleDeleteConfirm = () => {
-    if (selectedRow) {
-      const key = String(selectedRow[primaryKey]);
-      deleteMutation.mutate(key);
-    }
-  };
-
-  // CSV parsing function
-  const parseCSV = (text: string): { columns: string[]; rows: Record<string, string>[] } => {
-    const lines = text.trim().split('\n');
-    if (lines.length === 0) return { columns: [], rows: [] };
-
-    // Parse header
-    const columns = lines[0].split(',').map(col => col.trim().replace(/^"|"$/g, ''));
-
-    // Parse rows
-    const rows: Record<string, string>[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(val => val.trim().replace(/^"|"$/g, ''));
-      const row: Record<string, string> = {};
-      columns.forEach((col, idx) => {
-        row[col] = values[idx] || '';
-      });
-      rows.push(row);
-    }
-
-    return { columns, rows };
-  };
-
-  // Validate CSV against table schema
-  const validateCSV = async (csvColumns: string[], csvRows: Record<string, string>[]): Promise<{ errors: string[]; warnings: string[] }> => {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    try {
-      const schema = await fetchTableSchema(tableName!);
-      const tableColumns = schema.columns.map(c => c.name);
-
-      // Check for _key column (will be stripped automatically)
-      if (csvColumns.includes('_key')) {
-        warnings.push('Note: "_key" column will be ignored (auto-generated by Laserfiche)');
-      }
-
-      // Check for unknown columns
-      const unknownCols = csvColumns.filter(col => col !== '_key' && !tableColumns.includes(col));
-      if (unknownCols.length > 0) {
-        errors.push(`Unknown columns: ${unknownCols.join(', ')}`);
-      }
-
-      // Check for empty rows
-      if (csvRows.length === 0) {
-        errors.push('CSV file is empty (no data rows)');
-      }
-
-    } catch (err) {
-      errors.push(`Failed to fetch table schema: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
-
-    return { errors, warnings };
-  };
-
-  // Handle file selection
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Reset state
-    setCsvData([]);
-    setCsvColumns([]);
-    setUploadErrors([]);
-    setUploadWarnings([]);
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      const { columns, rows } = parseCSV(text);
-
-      setCsvColumns(columns);
-      setCsvData(rows);
-
-      // Validate
-      const { errors, warnings } = await validateCSV(columns, rows);
-      setUploadErrors(errors);
-      setUploadWarnings(warnings);
-
-      // Open dialog
-      setUploadOpen(true);
-    };
-    reader.readAsText(file);
-
-    // Reset input so same file can be selected again
-    event.target.value = '';
-  };
-
-  // Show upload confirmation dialog
-  const handleShowUploadConfirm = () => {
-    setUploadOpen(false);
-    setUploadConfirmOpen(true);
-  };
-
-  // Handle upload execution (replace all rows)
-  const handleUploadConfirm = async () => {
-    if (csvData.length === 0) return;
-
-    setUploadConfirmOpen(false);
-    setIsUploading(true);
-    setUploadOpen(true);
-
-    try {
-      // Strip _key from rows before uploading (it's auto-generated)
-      const rowsToUpload = csvData.map(row => {
-        const { _key, ...rest } = row;
-        return rest;
-      });
-
-      const result = await replaceAllRows(tableName!, rowsToUpload);
-      setUploadResult(result);
-      setUploadOpen(false);
-      setResultOpen(true);
-
-      // Refresh table data and row count
-      queryClient.invalidateQueries({ queryKey: ['tableRows', tableName] });
-      queryClient.invalidateQueries({ queryKey: ['tableRowCount', tableName] });
-
-      if (result.success) {
-        setSnackbar({ open: true, message: `Successfully replaced table with ${result.rows_replaced} rows`, severity: 'success' });
-      } else {
-        setSnackbar({ open: true, message: result.error || 'Replace operation failed', severity: 'error' });
-      }
-    } catch (err) {
-      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Upload failed', severity: 'error' });
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <Box display="flex" justifyContent="center" py={4}>
@@ -570,24 +244,8 @@ export default function TableDetailPage() {
           <Button startIcon={<Refresh />} onClick={() => refetch()} sx={{ mr: 1 }}>
             Refresh
           </Button>
-          <Button startIcon={<Download />} onClick={handleDownloadCsv} sx={{ mr: 1 }} disabled={rows.length === 0}>
+          <Button startIcon={<Download />} onClick={handleDownloadCsv} disabled={rows.length === 0}>
             Download CSV
-          </Button>
-          <Button
-            component="label"
-            startIcon={<Upload />}
-            sx={{ mr: 1 }}
-          >
-            Upload CSV
-            <input
-              type="file"
-              accept=".csv"
-              hidden
-              onChange={handleFileSelect}
-            />
-          </Button>
-          <Button variant="contained" startIcon={<Add />} onClick={handleCreate}>
-            Add Row
           </Button>
         </Box>
       </Box>
@@ -655,7 +313,6 @@ export default function TableDetailPage() {
                   {column}
                 </TableCell>
               ))}
-              <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
             </TableRow>
             <TableRow>
               {displayColumns.map((column) => (
@@ -671,13 +328,12 @@ export default function TableDetailPage() {
                   />
                 </TableCell>
               ))}
-              <TableCell />
             </TableRow>
           </TableHead>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={displayColumns.length + 1} align="center">
+                <TableCell colSpan={displayColumns.length} align="center">
                   No rows found
                 </TableCell>
               </TableRow>
@@ -689,14 +345,6 @@ export default function TableDetailPage() {
                       {String(row[column] ?? '')}
                     </TableCell>
                   ))}
-                  <TableCell>
-                    <IconButton size="small" onClick={() => handleEdit(row)}>
-                      <Edit fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => handleDelete(row)} color="error">
-                      <Delete fontSize="small" />
-                    </IconButton>
-                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -719,104 +367,6 @@ export default function TableDetailPage() {
           }}
         />
       </TableContainer>
-
-      {/* Create Dialog */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add New Row</DialogTitle>
-        <DialogContent>
-          {columns.filter(col => col !== primaryKey).map((column) => {
-            const colType = getColumnType(column);
-            const displayType = getDisplayType(colType);
-            return (
-              <TextField
-                key={column}
-                label={`${column} (${displayType})`}
-                value={formData[column] || ''}
-                onChange={(e) => handleFormChange(column, e.target.value)}
-                fullWidth
-                margin="normal"
-                size="small"
-                error={!!validationErrors[column]}
-                helperText={validationErrors[column] || ''}
-              />
-            );
-          })}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-          <Button
-            onClick={handleCreateSubmit}
-            variant="contained"
-            disabled={createMutation.isPending || Object.keys(validationErrors).length > 0}
-          >
-            {createMutation.isPending ? 'Creating...' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Row</DialogTitle>
-        <DialogContent>
-          {displayColumns.map((column) => {
-            const colType = getColumnType(column);
-            const displayType = getDisplayType(colType);
-            return (
-              <TextField
-                key={column}
-                label={`${column} (${displayType})`}
-                value={formData[column] || ''}
-                onChange={(e) => handleFormChange(column, e.target.value)}
-                fullWidth
-                margin="normal"
-                size="small"
-                error={!!validationErrors[column]}
-                helperText={validationErrors[column] || ''}
-              />
-            );
-          })}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditOpen(false)}>Cancel</Button>
-          <Button
-            onClick={handleEditSubmit}
-            variant="contained"
-            disabled={updateMutation.isPending || Object.keys(validationErrors).length > 0}
-          >
-            {updateMutation.isPending ? 'Saving...' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Delete Row</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete this row? This action cannot be undone.
-          </Typography>
-          {selectedRow && (
-            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1, maxHeight: 300, overflow: 'auto' }}>
-              {displayColumns.map((column) => (
-                <Typography key={column} variant="body2" sx={{ mb: 0.5 }}>
-                  <strong>{column}:</strong> {String(selectedRow[column] ?? '')}
-                </Typography>
-              ))}
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
-          <Button
-            onClick={handleDeleteConfirm}
-            color="error"
-            variant="contained"
-            disabled={deleteMutation.isPending}
-          >
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Help Dialog */}
       <Dialog open={helpOpen} onClose={() => setHelpOpen(false)} maxWidth="sm" fullWidth>
@@ -845,6 +395,12 @@ export default function TableDetailPage() {
             <Typography component="li" variant="body2">Column filters only work on currently loaded rows</Typography>
             <Typography component="li" variant="body2">CSV export includes only the current filtered results</Typography>
           </Box>
+
+          <Alert severity="info" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              <strong>LFDataView Community Edition</strong> is read-only. For write capabilities (add, edit, delete rows), check out <strong>LFDataView Managed</strong>.
+            </Typography>
+          </Alert>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setHelpOpen(false)} variant="contained">
@@ -852,170 +408,6 @@ export default function TableDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Upload Preview Dialog */}
-      <Dialog open={uploadOpen} onClose={() => !isUploading && setUploadOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Upload CSV - Preview</DialogTitle>
-        <DialogContent>
-          {uploadErrors.length > 0 && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" gutterBottom>Validation Errors:</Typography>
-              <ul style={{ margin: 0, paddingLeft: 20 }}>
-                {uploadErrors.map((err, idx) => (
-                  <li key={idx}>{err}</li>
-                ))}
-              </ul>
-            </Alert>
-          )}
-
-          {uploadWarnings.length > 0 && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              {uploadWarnings.map((warn, idx) => (
-                <Typography key={idx} variant="body2">{warn}</Typography>
-              ))}
-            </Alert>
-          )}
-
-          <Typography variant="body2" sx={{ mb: 2 }}>
-            <strong>Columns:</strong> {csvColumns.filter(c => c !== '_key').join(', ')}
-          </Typography>
-          <Typography variant="body2" sx={{ mb: 2 }}>
-            <strong>Rows to upload:</strong> {csvData.length}
-          </Typography>
-
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            This will replace ALL existing rows in the table with the uploaded data.
-          </Alert>
-
-          {csvData.length > 0 && (
-            <Box sx={{ maxHeight: 300, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    {csvColumns.map((col) => (
-                      <TableCell key={col} sx={{ fontWeight: 'bold' }}>{col}</TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {csvData.slice(0, 5).map((row, idx) => (
-                    <TableRow key={idx}>
-                      {csvColumns.map((col) => (
-                        <TableCell key={col}>{row[col]}</TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                  {csvData.length > 5 && (
-                    <TableRow>
-                      <TableCell colSpan={csvColumns.length} align="center" sx={{ fontStyle: 'italic' }}>
-                        ... and {csvData.length - 5} more rows
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Box>
-          )}
-
-          {isUploading && (
-            <Box sx={{ mt: 2 }}>
-              <LinearProgress />
-              <Typography variant="body2" align="center" sx={{ mt: 1 }}>
-                Uploading rows...
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setUploadOpen(false)} disabled={isUploading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleShowUploadConfirm}
-            variant="contained"
-            color="warning"
-            disabled={isUploading || uploadErrors.length > 0 || csvData.length === 0}
-          >
-            {isUploading ? 'Uploading...' : `Replace Table with ${csvData.length} Rows`}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Upload Confirmation Dialog */}
-      <Dialog open={uploadConfirmOpen} onClose={() => setUploadConfirmOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Confirm Replace All Rows</DialogTitle>
-        <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="body1" fontWeight="bold">
-              This will DELETE ALL existing rows in the table!
-            </Typography>
-          </Alert>
-          <Typography variant="body2" paragraph>
-            You are about to replace all data in <strong>{tableName}</strong> with {csvData.length} rows from your CSV file.
-          </Typography>
-          <Typography variant="body2" paragraph>
-            This operation:
-          </Typography>
-          <Box component="ul" sx={{ pl: 2, mt: 0 }}>
-            <Typography component="li" variant="body2">Deletes all existing rows in the table</Typography>
-            <Typography component="li" variant="body2">Inserts {csvData.length} new rows from your CSV</Typography>
-            <Typography component="li" variant="body2">Cannot be undone</Typography>
-          </Box>
-          <Typography variant="body2" sx={{ mt: 2 }}>
-            Are you sure you want to continue?
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setUploadConfirmOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleUploadConfirm}
-            variant="contained"
-            color="error"
-          >
-            Yes, Replace All Rows
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Upload Results Dialog */}
-      <Dialog open={resultOpen} onClose={() => setResultOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Upload Results</DialogTitle>
-        <DialogContent>
-          {uploadResult && (
-            uploadResult.success ? (
-              <Alert severity="success" sx={{ mb: 2 }}>
-                Successfully replaced table with {uploadResult.rows_replaced} rows
-              </Alert>
-            ) : (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {uploadResult.error || 'Replace operation failed'}
-              </Alert>
-            )
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setResultOpen(false)} variant="contained">
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-      >
-        <Alert
-          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 }

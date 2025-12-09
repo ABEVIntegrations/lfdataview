@@ -1,11 +1,11 @@
 # Self-Hosting Guide
 
-**Last Updated:** 2025-11-25
-**Version:** 1.0 (Community Edition - Stateless)
+**Last Updated:** 2025-12-09
+**Version:** 1.0 (Community Edition - Read-Only)
 
 ## Overview
 
-Guide for deploying LF DataView on your own server. The Community Edition uses stateless authentication with no database required.
+Guide for deploying LFDataView Community Edition on your own server. The Community Edition is read-only and uses stateless authentication with no database required.
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ Guide for deploying LF DataView on your own server. The Community Edition uses s
 2. Create new application
 3. Set **Application Type:** Web App
 4. Set **Redirect URI:** `https://yourdomain.com/auth/callback`
-5. Set **Scopes:** `table.Read table.Write project/{YOUR_PROJECT}`
+5. Set **Scopes:** `table.Read project/{YOUR_PROJECT}`
 6. Save `client_id` and `client_secret`
 
 ## Step 2: Server Setup
@@ -149,7 +149,7 @@ docker compose -f docker-compose.prod.yml logs -f
 1. Visit `https://yourdomain.com`
 2. Click "Login with Laserfiche"
 3. Authenticate
-4. Verify you can view/edit tables
+4. Verify you can view tables
 
 ## Maintenance
 

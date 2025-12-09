@@ -1,8 +1,8 @@
 # API Reference
 
-**Last Updated:** 2025-11-25
+**Last Updated:** 2025-12-09
 **Base URL:** `http://localhost:8000` (development)
-**Version:** 1.0 (Community Edition)
+**Version:** 1.0 (Community Edition - Read-Only)
 
 ## Authentication Endpoints
 
@@ -11,47 +11,64 @@
 - `POST /auth/logout` - Logout user (clears cookies)
 - `GET /auth/status` - Check if user is authenticated
 
-## Table Endpoints
-
-See [Feature 02: Table CRUD Operations](../features/02-table-crud-operations/API_DESIGN.md)
+## Table Endpoints (Read-Only)
 
 - `GET /tables` - List all tables
-- `GET /tables/{table_name}` - Get table rows (paginated)
+- `GET /tables/{table_name}` - Get table rows (paginated, with optional filtering)
 - `GET /tables/{table_name}/schema` - Get table column definitions
-- `GET /tables/{table_name}/{key}` - Get single row
-- `POST /tables/{table_name}` - Create row
-- `POST /tables/{table_name}/batch` - Batch create rows
-- `PATCH /tables/{table_name}/{key}` - Update row
-- `DELETE /tables/{table_name}/{key}` - Delete row
+- `GET /tables/{table_name}/count` - Get table row count
+- `GET /tables/{table_name}/{key}` - Get single row by key
 
-### Batch Create Endpoint
+### List Tables
 
-`POST /tables/{table_name}/batch`
-
-**Request Body:**
-```json
-{
-  "rows": [
-    {"Name": "Item 1", "Value": 100},
-    {"Name": "Item 2", "Value": 200}
-  ]
-}
-```
+`GET /tables`
 
 **Response:**
 ```json
 {
-  "total": 2,
-  "succeeded": 2,
-  "failed": 0,
-  "results": [
-    {"index": 0, "success": true, "data": {...}, "error": null},
-    {"index": 1, "success": true, "data": {...}, "error": null}
+  "tables": [
+    {"name": "Holidays", "displayName": "Holidays", "description": null},
+    {"name": "Customers", "displayName": "Customers", "description": null}
   ]
 }
 ```
 
-### Schema Endpoint
+### Get Table Rows
+
+`GET /tables/{table_name}?limit=50&offset=0`
+
+**Query Parameters:**
+- `limit` (int, default: 50, max: 1000) - Number of rows per page
+- `offset` (int, default: 0) - Number of rows to skip
+- `filters` (JSON string) - Filter object, e.g., `{"Name": "test"}`
+- `filter_mode` (string, default: "and") - Filter logic: "and" or "or"
+
+**Response:**
+```json
+{
+  "rows": [
+    {"_key": "1", "Name": "New Year's Day", "Date": "2025-01-01"},
+    {"_key": "2", "Name": "Memorial Day", "Date": "2025-05-26"}
+  ],
+  "total": 12,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### Get Table Row Count
+
+`GET /tables/{table_name}/count`
+
+**Response:**
+```json
+{
+  "table_name": "Holidays",
+  "row_count": 12
+}
+```
+
+### Get Table Schema
 
 `GET /tables/{table_name}/schema`
 
@@ -60,10 +77,21 @@ See [Feature 02: Table CRUD Operations](../features/02-table-crud-operations/API
 {
   "table_name": "Holidays",
   "columns": [
-    {"name": "_key", "type": "string", "required": true},
-    {"name": "Name", "type": "string", "required": false},
-    {"name": "Date", "type": "string", "required": false}
+    {"name": "_key", "type": "Edm.String", "required": true},
+    {"name": "Name", "type": "Edm.String", "required": false},
+    {"name": "Date", "type": "Edm.String", "required": false}
   ]
+}
+```
+
+### Get Single Row
+
+`GET /tables/{table_name}/{key}`
+
+**Response:**
+```json
+{
+  "data": {"_key": "1", "Name": "New Year's Day", "Date": "2025-01-01"}
 }
 ```
 
@@ -71,3 +99,15 @@ See [Feature 02: Table CRUD Operations](../features/02-table-crud-operations/API
 
 - **Swagger UI:** http://localhost:8000/docs
 - **ReDoc:** http://localhost:8000/redoc
+
+## Community Edition Limitations
+
+This is a read-only edition. The following operations are **not available**:
+
+- `POST /tables/{table_name}` - Create row
+- `POST /tables/{table_name}/batch` - Batch create rows
+- `POST /tables/{table_name}/replace` - Replace all rows
+- `PATCH /tables/{table_name}/{key}` - Update row
+- `DELETE /tables/{table_name}/{key}` - Delete row
+
+For write capabilities, see **LFDataView Managed**.

@@ -1,14 +1,18 @@
-# LF DataView
+# LFDataView Community Edition
 
-A self-hosted web application for viewing and managing Laserfiche Cloud lookup tables.
+A free, open-source, self-hosted web application for viewing Laserfiche Cloud lookup tables.
 
-## Features
+## Community Edition Features
 
 - Browse and search Laserfiche lookup tables
-- Create, edit, and delete table rows
-- CSV import (append or replace) and export
-- Column filtering with wildcard support
+- View table rows with pagination (beyond LF's UI limits)
+- Server-side and client-side filtering
+- Sort and paginate through large tables
+- Export to CSV
+- Basic table metadata
 - OAuth 2.0 authentication with Laserfiche Cloud
+
+**This is a read-only edition.** For write capabilities (add, edit, delete rows, CSV import), check out **LFDataView Managed**.
 
 ## Security & Privacy
 
@@ -33,7 +37,7 @@ When you log out or close your browser, the token is cleared. There is no persis
 1. Go to [developers.laserfiche.com](https://developers.laserfiche.com/)
 2. Create a new **Web App**
 3. Set **Redirect URI** to: `http://localhost:8000/auth/callback`
-4. Add scopes: `table.Read`, `table.Write`, `project/{YOUR_PROJECT}`
+4. Add scopes: `table.Read`, `project/{YOUR_PROJECT}`
 5. Save your **Client ID** and **Client Secret**
 
 ### 2. Configure Environment
@@ -81,11 +85,11 @@ docker-compose up -d
 - **Frontend:** http://localhost:3000
 - **API Docs:** http://localhost:8000/docs (development mode only)
 
-Click "Login with Laserfiche" to authenticate and start managing your tables.
+Click "Login with Laserfiche" to authenticate and start viewing your tables.
 
 ## Architecture
 
-LF DataView uses a stateless architecture with no database required:
+LFDataView uses a stateless architecture with no database required:
 
 - **Frontend:** React 18, Material-UI, React Query
 - **Backend:** FastAPI (Python 3.11)
@@ -109,6 +113,19 @@ LF DataView uses a stateless architecture with no database required:
 | `TOKEN_ENCRYPTION_KEY` | Encrypts access tokens (use Fernet.generate_key()) |
 | `ALLOWED_ORIGINS` | CORS origins (e.g., `http://localhost:3000`) |
 | `ENVIRONMENT` | `development` or `production` |
+
+## Editions
+
+| Feature | Community Edition | Managed Edition |
+|---------|-------------------|-----------------|
+| View tables | Yes | Yes |
+| Search & filter | Yes | Yes |
+| Pagination | Yes | Yes |
+| CSV export | Yes | Yes |
+| Add/Edit/Delete rows | No | Yes |
+| CSV import | No | Yes |
+| Bulk operations | No | Yes |
+| Support | Community | Professional |
 
 ## License
 
