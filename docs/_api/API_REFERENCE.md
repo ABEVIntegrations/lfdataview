@@ -99,6 +99,15 @@
 
 - **Swagger UI:** http://localhost:8000/docs
 - **ReDoc:** http://localhost:8000/redoc
+- **OAuth Test Page:** http://localhost:8000/test
+
+**Note:** The Swagger UI shows the API structure but cannot authenticate directly. To test authenticated endpoints:
+
+1. Login via the frontend at `http://localhost:3000` first
+2. Then visit `http://localhost:8000/docs` in the same browser
+3. The auth cookie will be included with requests
+
+Alternatively, use the OAuth test page at `http://localhost:8000/test` to login and test auth status directly from the backend.
 
 ## Community Edition Limitations
 
