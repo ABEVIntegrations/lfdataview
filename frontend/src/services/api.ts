@@ -5,8 +5,6 @@ import {
   TableRowsResponse,
   RowResponse,
   TableSchemaResponse,
-  BatchCreateResponse,
-  ReplaceAllResponse,
   TableCountResponse,
 } from '../types';
 
@@ -88,36 +86,6 @@ export async function fetchTableRow(
   return fetchWithCredentials(`${API_BASE}/tables/${tableName}/${key}`);
 }
 
-export async function createTableRow(
-  tableName: string,
-  data: Record<string, unknown>
-): Promise<RowResponse> {
-  return fetchWithCredentials(`${API_BASE}/tables/${tableName}`, {
-    method: 'POST',
-    body: JSON.stringify({ data }),
-  });
-}
-
-export async function updateTableRow(
-  tableName: string,
-  key: string,
-  data: Record<string, unknown>
-): Promise<RowResponse> {
-  return fetchWithCredentials(`${API_BASE}/tables/${tableName}/${key}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ data }),
-  });
-}
-
-export async function deleteTableRow(
-  tableName: string,
-  key: string
-): Promise<void> {
-  await fetchWithCredentials(`${API_BASE}/tables/${tableName}/${key}`, {
-    method: 'DELETE',
-  });
-}
-
 export async function fetchTableSchema(
   tableName: string
 ): Promise<TableSchemaResponse> {
@@ -128,24 +96,4 @@ export async function fetchTableRowCount(
   tableName: string
 ): Promise<TableCountResponse> {
   return fetchWithCredentials(`${API_BASE}/tables/${tableName}/count`);
-}
-
-export async function batchCreateRows(
-  tableName: string,
-  rows: Record<string, unknown>[]
-): Promise<BatchCreateResponse> {
-  return fetchWithCredentials(`${API_BASE}/tables/${tableName}/batch`, {
-    method: 'POST',
-    body: JSON.stringify({ rows }),
-  });
-}
-
-export async function replaceAllRows(
-  tableName: string,
-  rows: Record<string, unknown>[]
-): Promise<ReplaceAllResponse> {
-  return fetchWithCredentials(`${API_BASE}/tables/${tableName}/replace`, {
-    method: 'POST',
-    body: JSON.stringify({ rows }),
-  });
 }

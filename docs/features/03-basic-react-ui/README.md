@@ -1,12 +1,15 @@
-# Feature 03: Basic React UI
+# Feature 03: Basic React UI (Community Edition)
 
 **Phase:** 1 - MVP
 **Priority:** High
-**Status:** 📋 Planned
+**Status:** Complete
+**Edition:** Community Edition (Read-Only)
 
 ## Overview
 
-A functional web interface for viewing and managing Laserfiche table data. Built with React, provides intuitive CRUD operations and error handling.
+A functional web interface for viewing Laserfiche table data. Built with React and Material-UI, provides intuitive browsing, search, and export capabilities.
+
+**Note:** The Community Edition is read-only. For write operations (Create, Edit, Delete, CSV Import), see LFDataView Managed.
 
 ## User Workflows
 
@@ -21,27 +24,18 @@ A functional web interface for viewing and managing Laserfiche table data. Built
 2. Table detail page loads
 3. Sees rows in table/grid format
 4. Can paginate through data
-5. Sees loading indicator while fetching
+5. Sees total row count
+6. Sees loading indicator while fetching
 
-### 3. Create Row
-1. User clicks "Add Row" button
-2. Form/modal appears
-3. User fills in fields
-4. Clicks "Save"
-5. Row created, table refreshes
+### 3. Search and Filter
+1. **Server-side search:** Use search bar for exact match queries
+2. **Client-side filters:** Use column filters for partial matching on displayed rows
+3. Both are case-insensitive
 
-### 4. Edit Row
-1. User clicks "Edit" on a row
-2. Form/modal appears with current values
-3. User modifies fields
-4. Clicks "Save"
-5. Row updated, table refreshes
-
-### 5. Delete Row
-1. User clicks "Delete" on a row
-2. Confirmation dialog appears
-3. User confirms
-4. Row deleted, table refreshes
+### 4. Export Data
+1. User clicks "Download CSV"
+2. Currently filtered/displayed rows are exported
+3. CSV file downloads with table name and date
 
 ## Component Structure
 
@@ -49,34 +43,25 @@ A functional web interface for viewing and managing Laserfiche table data. Built
 src/
 ├── pages/
 │   ├── TablesPage.tsx           # List of tables
-│   ├── TableDetailPage.tsx      # Table rows + CRUD actions
+│   ├── TableDetailPage.tsx      # Table rows + search/filter/export
 │   ├── LoginPage.tsx            # (Feature 01)
 │   └── CallbackPage.tsx         # (Feature 01)
 │
 ├── components/
 │   ├── Layout.tsx               # App shell (header, nav, footer)
-│   ├── TableList.tsx            # Table list grid
-│   ├── TableDataGrid.tsx        # Data grid for rows
-│   ├── CreateRowModal.tsx       # Create row form
-│   ├── EditRowModal.tsx         # Edit row form
-│   ├── DeleteConfirmDialog.tsx  # Delete confirmation
-│   ├── Pagination.tsx           # Pagination controls
-│   ├── ErrorMessage.tsx         # Error display
-│   └── LoadingSpinner.tsx       # Loading indicator
+│   └── ...                      # Shared components
 │
 ├── hooks/
-│   ├── useAuth.ts               # (Feature 01)
-│   ├── useTables.ts             # Fetch tables
-│   └── useTableData.ts          # Fetch/mutate table rows
+│   └── useAuth.ts               # (Feature 01)
 │
 └── services/
-    └── api.ts                   # API client (Feature 01 + Feature 02 endpoints)
+    └── api.ts                   # API client
 ```
 
-## UI Components (MVP)
+## UI Components (Community Edition)
 
 ### Tables Page
-- Header: "Laserfiche Table Viewer"
+- Header: "LFDataView"
 - Table grid showing:
   - Table name
   - Display name (if available)
@@ -85,93 +70,47 @@ src/
 - Error message if fetch fails
 
 ### Table Detail Page
-- Header: Table name
+- Header: Table name with total row count
 - Action buttons:
-  - "Add Row" (opens create modal)
   - "Refresh" (reload data)
   - "Download CSV" (exports filtered data)
+  - Help button (usage instructions)
+- Search bar:
+  - Column selector dropdown
+  - Search input field
+  - Search and Clear buttons
 - Data grid:
   - Columns: Dynamic based on table schema
-  - **`_key` column is always displayed first** (leftmost position)
-  - **Column filters:** Filter input field below each column header (except `_key`)
-  - Rows: Table data (filtered if filters are active)
-  - Actions per row: Edit, Delete
-- Pagination controls (if > 50 rows)
+  - `_key` column is hidden (internal system field)
+  - Column filters below each header for partial matching
+  - Rows: Table data
+- Pagination controls
 - Loading indicator
 - Error message display
 
-#### Primary Key Behavior
-All Laserfiche tables have a `_key` column that serves as the primary key:
-- **Always displayed first:** The `_key` column is always shown in the leftmost position
-- **Auto-generated:** When creating a new row, the `_key` field is not shown (Laserfiche generates it automatically)
-- **Non-editable:** When editing a row, the `_key` field is displayed but disabled (cannot be modified)
-- **Used for operations:** Edit and delete operations use the `_key` value to identify the row
+#### Search Bar (Server-Side)
+The search bar queries Laserfiche directly:
+- **Exact match:** Searches for exact values (case-insensitive)
+- **Column selector:** Search a specific column or all columns
+- **OR mode:** When searching all columns, any match counts
 
-#### Column Filtering
-Each column (except `_key`) has a filter input field:
-- **Case-insensitive:** Filters match regardless of case
-- **Exact match by default:** Typing "2" matches only "2", not "102"
-- **Wildcard support:** Use `*` for fuzzy matching:
-  - `*2*` = contains "2"
-  - `2*` = starts with "2"
-  - `*2` = ends with "2"
-  - `*val*` = contains "val"
-- **Multiple filters:** Filters can be applied to multiple columns simultaneously (AND logic)
-- **Empty state:** Shows "No rows match the filter" when filters exclude all rows
+#### Column Filters (Client-Side)
+Filter fields below each column header:
+- **Partial matching:** Typing "smith" matches "Smith", "Smithson", "Blacksmith"
+- **Case-insensitive:** Matches regardless of case
+- **AND logic:** All filters must match
+- **Only affects displayed rows:** Works on current page data
 
 #### CSV Export
 The "Download CSV" button exports the currently displayed data:
-- **Exports filtered data:** Only rows matching the current filters are exported
-- **Includes all columns:** All columns including `_key` are exported
-- **Proper CSV formatting:** Values with commas, quotes, or newlines are properly escaped
-- **Filename format:** `{tableName}_{date}.csv` (e.g., `Holidays_2025-11-19.csv`)
-- **Disabled when empty:** Button is disabled when no rows to export
+- **Exports filtered data:** Only rows matching the current filters
+- **Excludes `_key`:** Internal system field is not exported
+- **Proper CSV formatting:** Values are properly escaped
+- **Filename format:** `{tableName}_{date}.csv`
+- **Disabled when empty:** Button disabled when no rows to export
 
-#### CSV Upload (Batch Import)
-The "Upload CSV" button allows importing multiple rows from a CSV file:
-
-##### Upload Workflow
-1. Click "Upload CSV" button and select a `.csv` file
-2. Preview dialog shows columns, row count, and first 5 rows
-3. System validates CSV against table schema
-4. Click "Upload X Rows" to execute the batch import
-5. Results dialog shows success/failure counts
-
-##### CSV Format Requirements
-- **Header row required:** First row must contain column names
-- **No `_key` column:** The `_key` field is auto-generated by Laserfiche
-- **Columns must match:** All columns in CSV must exist in the table
-- **Standard CSV format:** Comma-separated, quotes for values containing commas
-
-##### Validation Rules
-The system validates the CSV before upload:
-- Checks that all columns exist in the table schema
-- Rejects CSV files containing `_key` column
-- Rejects empty CSV files (no data rows)
-- Shows validation errors with upload button disabled
-
-##### Upload Behavior
-- **Concurrent processing:** Rows are uploaded concurrently (max 5 at a time) for better performance
-- **Individual results:** Each row success/failure is tracked independently
-- **No rollback:** If some rows fail, successful rows remain in the table
-- **Error details:** Failed rows show specific error messages
-
-##### Results Display
-After upload completes:
-- **Success count:** Number of rows successfully created
-- **Failure count:** Number of rows that failed
-- **Error details:** List of failed rows with error messages
-
-### Create/Edit Modal
-- Form fields (dynamic based on table columns)
-- "Save" and "Cancel" buttons
-- Validation errors displayed
-- Loading state during save
-
-### Delete Confirmation
-- "Are you sure you want to delete this row?"
-- Row details shown
-- "Delete" and "Cancel" buttons
+### Help Dialog
+Explains search and filter usage with a note about Community Edition being read-only.
 
 ## Routing
 
@@ -180,11 +119,11 @@ After upload completes:
 | `/` | TablesPage | List of tables (default after login) |
 | `/login` | LoginPage | Login page (Feature 01) |
 | `/auth/callback` | CallbackPage | OAuth callback (Feature 01) |
-| `/tables/:tableName` | TableDetailPage | Table data and CRUD operations |
+| `/tables/:tableName` | TableDetailPage | Table data viewing |
 
 ## State Management
 
-Use React Query (@tanstack/react-query) for server state:
+Uses React Query (@tanstack/react-query) for server state:
 
 ```typescript
 // Fetch tables
@@ -193,16 +132,16 @@ const { data: tables, isLoading, error } = useQuery({
   queryFn: fetchTables
 });
 
-// Fetch table rows
+// Fetch table rows with filters
 const { data: rows } = useQuery({
-  queryKey: ['table', tableName, page],
-  queryFn: () => fetchTableRows(tableName, page)
+  queryKey: ['tableRows', tableName, page, filters],
+  queryFn: () => fetchTableRows(tableName, limit, offset, filters)
 });
 
-// Mutations
-const createMutation = useMutation({
-  mutationFn: createRow,
-  onSuccess: () => queryClient.invalidateQueries(['table', tableName])
+// Fetch row count
+const { data: count } = useQuery({
+  queryKey: ['tableRowCount', tableName],
+  queryFn: () => fetchTableRowCount(tableName)
 });
 ```
 
@@ -210,19 +149,17 @@ const createMutation = useMutation({
 
 - **Network errors:** "Failed to connect. Please check your internet connection."
 - **401 Unauthorized:** Redirect to login
-- **403 Forbidden:** "You don't have permission to perform this action."
-- **404 Not Found:** "Table or row not found."
+- **403 Forbidden:** "You don't have permission to access this resource."
+- **404 Not Found:** "Table not found."
 - **500 Server Error:** "Something went wrong. Please try again later."
 
 ## Styling
 
-Options (to be decided during implementation):
-1. **Material-UI (MUI):** Pre-built components, consistent design
-2. **Ant Design:** Enterprise-grade components
-3. **Chakra UI:** Accessible, composable components
-4. **Custom CSS + TailwindCSS:** Full control, smaller bundle
-
-**Recommendation:** Material-UI for rapid MVP development.
+Built with Material-UI (MUI) for:
+- Consistent design system
+- Pre-built accessible components
+- Responsive layout
+- Dark mode support (future)
 
 ## Related Documentation
 

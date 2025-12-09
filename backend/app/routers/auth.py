@@ -31,9 +31,9 @@ async def login(response: Response):
         }
     """
     # Define scopes - include project scope for table access
+    # Community Edition: Read-only access
     scopes = [
         "table.Read",
-        "table.Write",
         f"project/{settings.LASERFICHE_PROJECT_NAME}",
     ]
 
