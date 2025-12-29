@@ -51,3 +51,6 @@ htmlcov/
 # Build artifacts
 build/
 dist/
+
+# claude
+.claude/
